@@ -181,7 +181,7 @@ input,select,textarea{outline:none;}
 .sidebar-foot{margin-top:auto;padding:10px 8px;}
 .logout-btn{width:100%;}
 
-.main-area{flex:1;margin-left:236px;min-height:100vh;display:flex;flex-direction:column;}
+.main-area{flex:1;min-width:0;margin-left:236px;min-height:100vh;display:flex;flex-direction:column;}
 .topbar{
   position:sticky;top:0;z-index:30;
   display:flex;align-items:center;gap:14px;
@@ -235,7 +235,8 @@ main#mainContent{padding:24px 26px 60px;}
 .panel-title .sm{font-size:11.5px;color:var(--text-faint);font-weight:600;margin-left:8px;}
 .panel-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;}
 
-.dash-grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
+.dash-grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;min-width:0;}
+.dash-grid2 > *{min-width:0;}
 .dash-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
 
 /* ---------- TOOLBAR / SEARCH / FILTER ---------- */
@@ -408,7 +409,30 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
   .avatar-name,.avatar-role{display:none;}
   #toastContainer{left:14px;right:14px;top:14px;max-width:none;}
 }
+
+/* ---------- MULTI-ROLE ADDITIONS ---------- */
+.check-field{display:flex;align-items:center;gap:9px;padding:10px 0;}
+.check-field input[type="checkbox"]{width:17px;height:17px;accent-color:var(--accent);cursor:pointer;}
+.check-field label{font-size:13px;color:var(--text);font-weight:600;margin:0;cursor:pointer;}
+.role-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase;}
+.role-admin{background:rgba(124,58,237,0.2);color:#d8b4fe;}
+.role-closer{background:rgba(56,189,248,0.18);color:#7dd3fc;}
+.role-dp{background:rgba(167,139,250,0.18);color:#c4b5fd;}
+.role-freelancer{background:rgba(251,191,36,0.18);color:#fde68a;}
+.role-client{background:rgba(34,197,94,0.18);color:#86efac;}
+.status-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:800;letter-spacing:0.3px;text-transform:uppercase;}
+.status-active{background:rgba(34,197,94,0.15);color:#86efac;}
+.status-disabled{background:rgba(248,113,113,0.15);color:#fca5a5;}
+.mini-note{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:8px;}
+.mini-note .mn-time{font-size:10.5px;color:var(--text-faint);margin-top:3px;}
+.deliv-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:9px 12px;margin-bottom:7px;font-size:12.5px;}
+.deliv-item a{color:var(--accent-2);font-weight:700;}
+.locked-note{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:12px;font-size:12.5px;color:var(--text-dim);margin-bottom:16px;}
 </style>
+<!-- Firebase (compat build — exposes the classic global `firebase` namespace so every
+     existing inline onclick="..." handler in this app keeps working unmodified) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -426,15 +450,19 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
     <h1 class="auth-title">ELITHNIC</h1>
     <p class="auth-sub">Agency operations platform — sign in to continue</p>
     <div class="field">
-      <label>Admin Password</label>
+      <label>Username</label>
+      <input type="text" id="loginUsername" placeholder="e.g. admin, CL01, DP01, FR01, CT01" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
       <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
-      <div class="field-err" id="loginErr">Incorrect password. Please try again.</div>
+      <div class="field-err" id="loginErr">Incorrect username or password.</div>
     </div>
     <button class="btn btn-primary btn-block" id="loginBtn">Sign In</button>
     <div class="link-row">
       <a id="forgotPassLink">Forgot password?</a> &nbsp;·&nbsp; <a id="trackLinkFromLogin">Track your project</a>
     </div>
-    <div class="auth-foot">Default password: elithnic123 — change it after first login</div>
+    <div class="auth-foot">Admin demo login: admin / elithnic123</div>
   </div>
 </div>
 
@@ -482,26 +510,10 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <div class="brand-mark">EL</div>
       <div>
         <div class="brand-name">ELITHNIC</div>
-        <div class="brand-sub">Operations Platform</div>
+        <div class="brand-sub" id="brandSub">Operations Platform</div>
       </div>
     </div>
-    <div class="nav-group-label">Overview</div>
-    <div class="nav-item active" data-view="dashboard"><span class="ic">⌂</span> Dashboard</div>
-    <div class="nav-item" data-view="kanban"><span class="ic">▦</span> Pipeline</div>
-    <div class="nav-group-label">Sales</div>
-    <div class="nav-item" data-view="leads"><span class="ic">◎</span> Leads <span class="nav-badge" id="navLeadsBadge">0</span></div>
-    <div class="nav-item" data-view="closers"><span class="ic">◈</span> Closers</div>
-    <div class="nav-group-label">Delivery</div>
-    <div class="nav-item" data-view="projects"><span class="ic">▣</span> Projects <span class="nav-badge" id="navProjectsBadge">0</span></div>
-    <div class="nav-item" data-view="dp"><span class="ic">◇</span> Delivery Partners</div>
-    <div class="nav-item" data-view="freelancers"><span class="ic">✦</span> Freelancers</div>
-    <div class="nav-group-label">Finance</div>
-    <div class="nav-item" data-view="payments"><span class="ic">$</span> Payments</div>
-    <div class="nav-item" data-view="analytics"><span class="ic">▱</span> Analytics</div>
-    <div class="nav-group-label">System</div>
-    <div class="nav-item" data-view="activity"><span class="ic">≡</span> Activity Log</div>
-    <div class="nav-item" data-view="backup"><span class="ic">⇄</span> Backup &amp; Export</div>
-    <div class="nav-item" data-view="settings"><span class="ic">⚙</span> Settings</div>
+    <div id="sidebarNav"></div>
     <div class="sidebar-foot">
       <button class="btn btn-ghost logout-btn" id="logoutBtn">⏻ Logout</button>
     </div>
@@ -517,10 +529,10 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <div class="topbar-right">
         <button class="icon-btn" id="notifBtn">🔔<span class="icon-dot" id="notifDot"></span></button>
         <div class="avatar-chip">
-          <div class="avatar-circ">A</div>
+          <div class="avatar-circ" id="avatarInitial">A</div>
           <div>
-            <div class="avatar-name">Admin</div>
-            <div class="avatar-role">Owner</div>
+            <div class="avatar-name" id="avatarName">Admin</div>
+            <div class="avatar-role" id="avatarRole">Owner</div>
           </div>
         </div>
       </div>
@@ -528,7 +540,7 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
     </div>
 
     <main id="mainContent">
-      <!-- ============ DASHBOARD ============ -->
+      <!-- ============ DASHBOARD (role-aware) ============ -->
       <section class="view-section active" id="view-dashboard"></section>
       <!-- ============ KANBAN ============ -->
       <section class="view-section" id="view-kanban"></section>
@@ -552,6 +564,18 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-backup"></section>
       <!-- ============ SETTINGS ============ -->
       <section class="view-section" id="view-settings"></section>
+      <!-- ============ USERS (admin only) ============ -->
+      <section class="view-section" id="view-users"></section>
+      <!-- ============ MY LEADS (closer) ============ -->
+      <section class="view-section" id="view-myleads"></section>
+      <!-- ============ MY DEALS / COMMISSION (closer) ============ -->
+      <section class="view-section" id="view-mydeals"></section>
+      <!-- ============ MY PROJECTS (delivery partner) ============ -->
+      <section class="view-section" id="view-myprojects"></section>
+      <!-- ============ MY TASKS (freelancer) ============ -->
+      <section class="view-section" id="view-mytasks"></section>
+      <!-- ============ MY PROJECT (client) ============ -->
+      <section class="view-section" id="view-myproject"></section>
     </main>
   </div>
 </div>
@@ -570,6 +594,38 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
    --------------------------------------------------------------------- */
 const DB_KEY = 'elithnic_db_v1';
 const SESSION_KEY = 'elithnic_session_v1';
+
+/* ---------------------------------------------------------------------
+   1b. FIRESTORE — primary database (localStorage becomes an offline cache only)
+   --------------------------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCRA-KovecQr9ZS3H3Swr4_1qzIzS7MHl4",
+  authDomain: "elithnic.firebaseapp.com",
+  projectId: "elithnic",
+  storageBucket: "elithnic.firebasestorage.app",
+  messagingSenderId: "843612469239",
+  appId: "1:843612469239:web:b5fd79945aa9093b64e0f2"
+};
+let fsdb = null;
+let FIREBASE_AVAILABLE = false;
+try{
+  firebase.initializeApp(firebaseConfig);
+  fsdb = firebase.firestore();
+  // Firestore's own IndexedDB-backed offline cache (auto read/write fallback while offline)
+  fsdb.enablePersistence({ synchronizeTabs: true }).catch(err => {
+    console.warn('Firestore offline persistence unavailable:', err.code);
+  });
+  FIREBASE_AVAILABLE = true;
+}catch(err){
+  console.error('[Firestore] SDK failed to initialize — the app will run from its local offline cache until the connection is restored:', err.message);
+}
+
+// Every top-level array collection in the app, 1:1 with a Firestore collection.
+// Document ID === the app's own record.id (never Firestore auto-IDs) so writes
+// are idempotent by nature — re-sending the same record can never create a duplicate.
+const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications'];
+const FS_SYSTEM_DOC = FIREBASE_AVAILABLE ? fsdb.collection('system').doc('config') : null; // holds { auth, counters, meta }
+let FS_UNSUBSCRIBERS = [];
 
 const SERVICES = ['Social Media Management','Web Design & Development','SEO','Content Writing','Graphic Design','Video Editing','Paid Ads Management','Branding & Identity','App Development','Email Marketing','Other'];
 const LEAD_STATUSES = ['New Lead','Contacted','Follow Up','Negotiation','Closed','Lost'];
@@ -633,27 +689,69 @@ function debounce(fn, ms){
 }
 
 /* ---------------------------------------------------------------------
-   3. DATA LAYER (localStorage)
+   3. DATA LAYER — Firestore is the primary database.
+   localStorage now holds only a best-effort offline cache, refreshed after
+   every successful load/write so the app can still boot while offline.
    --------------------------------------------------------------------- */
 function defaultDB(){
   return {
-    auth: { passwordHash: null, recoveryKeyHash: null, recoveryShown:false },
-    leads: [], closers: [], deliveryPartners: [], freelancers: [], projects: [],
+    auth: { recoveryKeyHash: null },
+    users: [],
+    leads: [], closers: [], deliveryPartners: [], freelancers: [], clients: [], projects: [],
     activities: [], notifications: [],
-    counters: { lead:0, closer:0, dp:0, freelancer:0, project:1000 },
+    counters: { lead:0, closer:0, dp:0, freelancer:0, client:0, project:1000, user:0 },
     meta: { createdAt: new Date().toISOString() }
   };
 }
 
 let DB = null;
 
-function loadDB(){
+function saveLocalCache(){
+  try{ localStorage.setItem(DB_KEY, JSON.stringify(DB)); }
+  catch(e){ console.warn('Local cache write failed:', e.message); }
+}
+function loadLocalCacheOnly(){
   try{
     const raw = localStorage.getItem(DB_KEY);
     DB = raw ? JSON.parse(raw) : defaultDB();
   }catch(e){
-    console.error('DB load failed, resetting', e);
+    console.error('Local cache read failed, resetting', e);
     DB = defaultDB();
+  }
+}
+async function persistSystemConfig(){
+  if(FIREBASE_AVAILABLE){
+    await FS_SYSTEM_DOC.set({ auth: DB.auth, counters: DB.counters, meta: DB.meta }, { merge: true });
+  }
+  saveLocalCache();
+}
+
+async function loadDB(){
+  if(!FIREBASE_AVAILABLE){
+    loadLocalCacheOnly();
+    toast('Working offline — showing your last saved data', 'info');
+  }else{
+    try{
+      const results = await Promise.all(FS_COLLECTIONS.map(coll => fsdb.collection(coll).get()));
+      const fresh = defaultDB();
+      FS_COLLECTIONS.forEach((coll, i) => {
+        fresh[coll] = results[i].docs.map(d => d.data());
+      });
+      const sysSnap = await FS_SYSTEM_DOC.get();
+      if(sysSnap.exists){
+        const sys = sysSnap.data();
+        if(sys.auth) fresh.auth = sys.auth;
+        if(sys.counters) fresh.counters = Object.assign(fresh.counters, sys.counters);
+        if(sys.meta) fresh.meta = sys.meta;
+      }
+      DB = fresh;
+      saveLocalCache();
+      console.log('[Firestore] Loaded all collections from Firestore.');
+    }catch(err){
+      console.error('[Firestore] Load failed, falling back to offline cache:', err.message);
+      loadLocalCacheOnly();
+      toast('Working offline — showing your last saved data', 'info');
+    }
   }
   // schema patch for forward-compat
   const d = defaultDB();
@@ -661,47 +759,132 @@ function loadDB(){
   for(const k in d.counters){ if(!(k in DB.counters)) DB.counters[k] = d.counters[k]; }
   return DB;
 }
-function saveDB(){
-  localStorage.setItem(DB_KEY, JSON.stringify(DB));
+
+async function nextCounter(name){
+  if(!FIREBASE_AVAILABLE){
+    DB.counters[name] = (DB.counters[name]||0) + 1;
+    saveLocalCache();
+    return DB.counters[name];
+  }
+  // Firestore transaction: guarantees two devices creating a project at the
+  // exact same instant can never be handed the same tracking number.
+  const newValue = await fsdb.runTransaction(async (tx) => {
+    const snap = await tx.get(FS_SYSTEM_DOC);
+    const counters = (snap.exists && snap.data().counters) ? snap.data().counters : DB.counters;
+    const next = (counters[name]||0) + 1;
+    counters[name] = next;
+    tx.set(FS_SYSTEM_DOC, { counters }, { merge: true });
+    return next;
+  });
+  DB.counters[name] = newValue;
+  saveLocalCache();
+  return newValue;
 }
-function nextCounter(name){
-  DB.counters[name] = (DB.counters[name]||0) + 1;
-  saveDB();
-  return DB.counters[name];
-}
-function nextTrackingId(){
-  const n = nextCounter('project');
+async function nextTrackingId(){
+  const n = await nextCounter('project');
   return 'ELI-' + n;
 }
+function pad(n, width){ return String(n).padStart(width,'0'); }
 
-/* generic collection helpers */
+/* generic collection helpers — reads are unchanged everywhere in the app */
 function getAll(coll){ return DB[coll] || []; }
 function getById(coll, id){ return getAll(coll).find(x => x.id === id); }
-function upsert(coll, record){
+
+async function upsert(coll, record){
+  if(FIREBASE_AVAILABLE && FS_COLLECTIONS.includes(coll)){
+    await fsdb.collection(coll).doc(record.id).set(record); // Firestore first — single source of truth
+  }
   const arr = DB[coll];
   const idx = arr.findIndex(x => x.id === record.id);
   if(idx >= 0) arr[idx] = record; else arr.push(record);
-  saveDB();
+  saveLocalCache();
 }
-function removeById(coll, id){
+async function removeById(coll, id){
+  if(FIREBASE_AVAILABLE && FS_COLLECTIONS.includes(coll)){
+    await fsdb.collection(coll).doc(id).delete();
+  }
   DB[coll] = DB[coll].filter(x => x.id !== id);
-  saveDB();
+  saveLocalCache();
+}
+
+/* ---------------------------------------------------------------------
+   3b. REAL-TIME CROSS-DEVICE SYNC (Firestore onSnapshot)
+   --------------------------------------------------------------------- */
+const debouncedRenderAll = debounce(() => { if(CURRENT_USER) renderAll(); }, 150);
+function startRealtimeSync(){
+  if(!FIREBASE_AVAILABLE) return;
+  if(FS_UNSUBSCRIBERS.length) return; // already listening — never attach duplicate listeners
+  FS_COLLECTIONS.forEach(coll => {
+    const unsub = fsdb.collection(coll).onSnapshot(snapshot => {
+      DB[coll] = snapshot.docs.map(d => d.data());
+      saveLocalCache();
+      debouncedRenderAll();
+    }, err => console.error('[Firestore] Realtime sync error on', coll, err.message));
+    FS_UNSUBSCRIBERS.push(unsub);
+  });
+  console.log('[Firestore] Realtime listeners attached for', FS_COLLECTIONS.length, 'collections.');
+}
+function stopRealtimeSync(){
+  FS_UNSUBSCRIBERS.forEach(unsub => unsub());
+  FS_UNSUBSCRIBERS = [];
+}
+
+/* ---------------------------------------------------------------------
+   3c. BULK OPERATIONS (demo data / restore / reset) — batched writes so
+   100+ records sync in a couple of round-trips instead of one-by-one.
+   --------------------------------------------------------------------- */
+async function bulkWriteRecords(recordsByCollection){
+  const entries = Object.entries(recordsByCollection).filter(([coll]) => FS_COLLECTIONS.includes(coll));
+  if(FIREBASE_AVAILABLE){
+    const allRecords = entries.flatMap(([coll, recs]) => recs.map(r => ({ coll, r })));
+    for(let i = 0; i < allRecords.length; i += 450){ // Firestore batch limit is 500 ops
+      const batch = fsdb.batch();
+      allRecords.slice(i, i+450).forEach(({coll, r}) => {
+        batch.set(fsdb.collection(coll).doc(r.id), r);
+      });
+      await batch.commit();
+    }
+  }
+  entries.forEach(([coll, recs]) => {
+    const arr = DB[coll] || (DB[coll] = []);
+    recs.forEach(r => {
+      const idx = arr.findIndex(x => x.id === r.id);
+      if(idx >= 0) arr[idx] = r; else arr.push(r);
+    });
+  });
+  saveLocalCache();
+}
+async function wipeFirestoreCollections(collections){
+  if(!FIREBASE_AVAILABLE) return;
+  for(const coll of (collections || FS_COLLECTIONS)){
+    const snap = await fsdb.collection(coll).get();
+    const docs = snap.docs;
+    for(let i = 0; i < docs.length; i += 450){
+      const batch = fsdb.batch();
+      docs.slice(i, i+450).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------
    4. ACTIVITY LOG + NOTIFICATIONS + TOASTS
    --------------------------------------------------------------------- */
 function logActivity(type, message){
-  DB.activities.unshift({ id: uid('act'), type, message, timestamp: new Date().toISOString() });
+  const entry = { id: uid('act'), type, message, timestamp: new Date().toISOString() };
+  DB.activities.unshift(entry);
   if(DB.activities.length > 100) DB.activities = DB.activities.slice(0,100);
-  saveDB();
+  saveLocalCache();
   if(document.getElementById('view-activity').classList.contains('active')) renderActivityView();
+  if(FIREBASE_AVAILABLE) fsdb.collection('activities').doc(entry.id).set(entry).catch(err => console.error('[Firestore] Activity log sync failed:', err.message));
 }
 function pushNotification(message, type){
-  DB.notifications.unshift({ id: uid('notif'), message, type: type||'info', read:false, timestamp: new Date().toISOString() });
+  const entry = { id: uid('notif'), message, type: type||'info', read:false, timestamp: new Date().toISOString() };
+  DB.notifications.unshift(entry);
   if(DB.notifications.length > 60) DB.notifications = DB.notifications.slice(0,60);
-  saveDB();
+  saveLocalCache();
   renderNotifDot();
+  if(FIREBASE_AVAILABLE) fsdb.collection('notifications').doc(entry.id).set(entry).catch(err => console.error('[Firestore] Notification sync failed:', err.message));
 }
 function toast(message, type){
   type = type || 'info';
@@ -714,46 +897,96 @@ function toast(message, type){
 }
 
 /* ---------------------------------------------------------------------
-   5. AUTH
+   5. MULTI-ROLE USER ACCOUNT SYSTEM
    --------------------------------------------------------------------- */
-async function ensureDefaultAuth(){
-  if(!DB.auth.passwordHash){
-    DB.auth.passwordHash = await sha256('elithnic123');
+const ROLE_LABELS = { admin:'Admin', closer:'Closer', dp:'Delivery Partner', freelancer:'Freelancer', client:'Client' };
+const ROLE_ENTITY_COLL = { closer:'closers', dp:'deliveryPartners', freelancer:'freelancers', client:'clients' };
+let CURRENT_USER = null;
+
+async function createUserRecord(opts){
+  const rec = {
+    id: uid('user'),
+    role: opts.role,
+    loginId: String(opts.loginId).toUpperCase(),
+    passwordHash: await sha256(String(opts.password)),
+    name: opts.name,
+    entityId: opts.entityId || null,
+    status: opts.status || 'active',
+    createdDate: todayISO()
+  };
+  await upsert('users', rec);
+  return rec;
+}
+function findUserByLoginId(loginId){
+  const q = String(loginId||'').trim().toUpperCase();
+  return getAll('users').find(u => u.loginId === q);
+}
+function entityForUser(u){
+  if(!u || u.role === 'admin') return null;
+  const coll = ROLE_ENTITY_COLL[u.role];
+  return coll ? getById(coll, u.entityId) : null;
+}
+function entityNameForUser(u){
+  if(!u) return '—';
+  if(u.role === 'admin') return 'ELITHNIC HQ';
+  const e = entityForUser(u);
+  return e ? e.name : '(unlinked)';
+}
+
+async function ensureBootstrap(){
+  if(DB.users.length === 0){
     const key = randomRecoveryKey();
     DB.auth.recoveryKeyHash = await sha256(key);
-    saveDB();
-    return key; // shown once to the user
+    await createUserRecord({ role:'admin', loginId:'admin', password:'elithnic123', name:'Admin' });
+    await generateDemoData();
+    await persistSystemConfig();
+    return key;
   }
   return null;
 }
+
 function isLoggedIn(){
-  try{ return sessionStorage.getItem(SESSION_KEY) === '1' || localStorage.getItem(SESSION_KEY) === '1'; }
+  try{ return !!(sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY)); }
   catch(e){ return false; }
 }
-function setLoggedIn(remember){
-  if(remember) localStorage.setItem(SESSION_KEY, '1');
-  sessionStorage.setItem(SESSION_KEY, '1');
+function getSessionUserId(){
+  try{ return sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY) || null; }
+  catch(e){ return null; }
+}
+function setLoggedIn(userId, remember){
+  if(remember) localStorage.setItem(SESSION_KEY, userId);
+  sessionStorage.setItem(SESSION_KEY, userId);
 }
 function clearLoggedIn(){
   sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SESSION_KEY);
 }
+function resolveCurrentUser(){
+  const id = getSessionUserId();
+  if(!id) return null;
+  const u = getById('users', id);
+  if(!u || u.status !== 'active') return null;
+  return u;
+}
 
 async function handleLogin(){
+  const username = document.getElementById('loginUsername').value.trim();
   const pass = document.getElementById('loginPassword').value;
   const err = document.getElementById('loginErr');
-  if(!pass){ err.style.display='block'; err.textContent='Please enter your password.'; return; }
+  if(!username || !pass){ err.style.display='block'; err.textContent='Please enter both username and password.'; return; }
+  const user = findUserByLoginId(username);
+  if(!user){ err.style.display='block'; err.textContent='Incorrect username or password.'; return; }
+  if(user.status !== 'active'){ err.style.display='block'; err.textContent='This account has been disabled. Contact your admin.'; return; }
   const hash = await sha256(pass);
-  if(hash === DB.auth.passwordHash){
-    err.style.display='none';
-    setLoggedIn(true);
-    document.getElementById('loginPassword').value='';
-    showApp();
-    toast('Welcome back, Admin', 'success');
-  }else{
-    err.style.display='block';
-    err.textContent='Incorrect password. Please try again.';
-  }
+  if(hash !== user.passwordHash){ err.style.display='block'; err.textContent='Incorrect username or password.'; return; }
+  err.style.display='none';
+  setLoggedIn(user.id, true);
+  CURRENT_USER = user;
+  document.getElementById('loginPassword').value='';
+  document.getElementById('loginUsername').value='';
+  logActivity('System', user.name+' ('+ROLE_LABELS[user.role]+') logged in');
+  showApp();
+  toast('Welcome back, '+user.name, 'success');
 }
 async function handleForgotReset(){
   const key = document.getElementById('recoveryInput').value.trim().toUpperCase();
@@ -764,10 +997,11 @@ async function handleForgotReset(){
   }
   const hash = await sha256(key);
   if(hash === DB.auth.recoveryKeyHash){
-    DB.auth.passwordHash = await sha256(newPass);
-    saveDB();
+    const admin = getAll('users').find(u=>u.role==='admin');
+    admin.passwordHash = await sha256(newPass);
+    await upsert('users', admin);
     err.style.display='none';
-    toast('Password reset successfully. Please sign in.', 'success');
+    toast('Admin password reset successfully. Please sign in.', 'success');
     showScreen('loginScreen');
   }else{
     err.style.display='block'; err.textContent='Recovery key does not match our records.';
@@ -779,26 +1013,46 @@ async function handleChangePassword(){
   const confirm_ = document.getElementById('settingsConfirmPass').value;
   if(!cur || !next || !confirm_){ toast('Please fill all password fields', 'error'); return; }
   const hash = await sha256(cur);
-  if(hash !== DB.auth.passwordHash){ toast('Current password is incorrect', 'error'); return; }
-  if(next.length < 6){ toast('New password must be at least 6 characters', 'error'); return; }
+  if(hash !== CURRENT_USER.passwordHash){ toast('Current password is incorrect', 'error'); return; }
+  if(next.length < 4){ toast('New password must be at least 4 characters', 'error'); return; }
   if(next !== confirm_){ toast('New password and confirmation do not match', 'error'); return; }
-  DB.auth.passwordHash = await sha256(next);
-  saveDB();
+  CURRENT_USER.passwordHash = await sha256(next);
+  await upsert('users', CURRENT_USER);
   document.getElementById('settingsCurPass').value='';
   document.getElementById('settingsNewPass').value='';
   document.getElementById('settingsConfirmPass').value='';
   toast('Password changed successfully', 'success');
-  logActivity('Settings', 'Admin password was changed');
+  logActivity('Settings', CURRENT_USER.name+"'s password was changed");
 }
 function handleLogout(){
+  if(CURRENT_USER) logActivity('System', CURRENT_USER.name+' ('+ROLE_LABELS[CURRENT_USER.role]+') logged out');
+  stopRealtimeSync();
   clearLoggedIn();
+  CURRENT_USER = null;
   closeAllPanels();
   showScreen('loginScreen');
   toast('Signed out', 'info');
 }
 
 /* ---------------------------------------------------------------------
-   6. SCREEN / ROUTING
+   5b. ROLE-BASED DATA SCOPING — users must never see another user's records
+   --------------------------------------------------------------------- */
+function scopedLeads(){
+  if(!CURRENT_USER || CURRENT_USER.role === 'admin') return getAll('leads');
+  if(CURRENT_USER.role === 'closer') return getAll('leads').filter(l => l.assignedCloserId === CURRENT_USER.entityId);
+  return [];
+}
+function scopedProjects(){
+  if(!CURRENT_USER || CURRENT_USER.role === 'admin') return getAll('projects');
+  if(CURRENT_USER.role === 'closer') return getAll('projects').filter(p => p.closerId === CURRENT_USER.entityId);
+  if(CURRENT_USER.role === 'dp') return getAll('projects').filter(p => p.dpId === CURRENT_USER.entityId);
+  if(CURRENT_USER.role === 'freelancer') return getAll('projects').filter(p => p.freelancerId === CURRENT_USER.entityId);
+  if(CURRENT_USER.role === 'client') return getAll('projects').filter(p => p.clientId === CURRENT_USER.entityId);
+  return [];
+}
+
+/* ---------------------------------------------------------------------
+   6. SCREEN / ROUTING (role-aware)
    --------------------------------------------------------------------- */
 function showScreen(id){
   ['loadingScreen','loginScreen','forgotScreen','trackScreen','appShell'].forEach(s=>{
@@ -807,8 +1061,82 @@ function showScreen(id){
 }
 function showApp(){
   showScreen('appShell');
+  applyRoleUI();
   renderAll();
   navigateTo('dashboard');
+  startRealtimeSync();
+}
+function applyRoleUI(){
+  const u = CURRENT_USER;
+  document.getElementById('avatarInitial').textContent = (u.name||'?').charAt(0).toUpperCase();
+  document.getElementById('avatarName').textContent = u.name;
+  document.getElementById('avatarRole').textContent = ROLE_LABELS[u.role];
+  document.getElementById('brandSub').textContent = u.role === 'admin' ? 'Operations Platform' : ROLE_LABELS[u.role]+' Workspace';
+  renderSidebarNav(u.role);
+}
+
+const NAV_CONFIG = {
+  admin:[
+    {group:'Overview', items:[
+      {view:'dashboard', ic:'⌂', label:'Dashboard'},
+      {view:'kanban', ic:'▦', label:'Pipeline'}
+    ]},
+    {group:'Sales', items:[
+      {view:'leads', ic:'◎', label:'Leads', badge:'navLeadsBadge'},
+      {view:'closers', ic:'◈', label:'Closers'}
+    ]},
+    {group:'Delivery', items:[
+      {view:'projects', ic:'▣', label:'Projects', badge:'navProjectsBadge'},
+      {view:'dp', ic:'◇', label:'Delivery Partners'},
+      {view:'freelancers', ic:'✦', label:'Freelancers'}
+    ]},
+    {group:'Finance', items:[
+      {view:'payments', ic:'$', label:'Payments'},
+      {view:'analytics', ic:'▱', label:'Analytics'}
+    ]},
+    {group:'System', items:[
+      {view:'users', ic:'☻', label:'Users'},
+      {view:'activity', ic:'≡', label:'Activity Log'},
+      {view:'backup', ic:'⇄', label:'Backup & Export'},
+      {view:'settings', ic:'⚙', label:'Settings'}
+    ]}
+  ],
+  closer:[
+    {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Sales', items:[
+      {view:'myleads', ic:'◎', label:'My Leads'},
+      {view:'mydeals', ic:'$', label:'My Deals & Commission'}
+    ]},
+    {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
+  ],
+  dp:[
+    {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Delivery', items:[{view:'myprojects', ic:'▣', label:'My Projects'}]},
+    {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
+  ],
+  freelancer:[
+    {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Work', items:[{view:'mytasks', ic:'✦', label:'My Tasks'}]},
+    {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
+  ],
+  client:[
+    {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Project', items:[{view:'myproject', ic:'▣', label:'My Project'}]},
+    {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
+  ]
+};
+function renderSidebarNav(role){
+  const cfg = NAV_CONFIG[role] || NAV_CONFIG.client;
+  document.getElementById('sidebarNav').innerHTML = cfg.map(g => `
+    <div class="nav-group-label">${g.group}</div>
+    ${g.items.map(it => `<div class="nav-item" data-view="${it.view}"><span class="ic">${it.ic}</span> ${it.label}${it.badge?` <span class="nav-badge" id="${it.badge}">0</span>`:''}</div>`).join('')}
+  `).join('');
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => navigateTo(item.dataset.view));
+  });
+}
+function allowedViewsForRole(role){
+  return (NAV_CONFIG[role]||NAV_CONFIG.client).flatMap(g=>g.items.map(i=>i.view));
 }
 
 const VIEW_META = {
@@ -823,13 +1151,22 @@ const VIEW_META = {
   analytics:{title:'Analytics', sub:'Revenue, profit and pipeline performance'},
   activity:{title:'Activity Log', sub:'A live record of everything happening in your agency'},
   backup:{title:'Backup & Export', sub:'Protect your data and export reports'},
-  settings:{title:'Settings', sub:'Account security and preferences'}
+  settings:{title:'Settings', sub:'Account security and preferences'},
+  users:{title:'Users', sub:'Manage every login account across your agency'},
+  myleads:{title:'My Leads', sub:'Leads assigned to you'},
+  mydeals:{title:'My Deals & Commission', sub:'Your closed deals and commission history'},
+  myprojects:{title:'My Projects', sub:'Projects assigned to you for delivery'},
+  mytasks:{title:'My Tasks', sub:'Work assigned to you'},
+  myproject:{title:'My Project', sub:'Live status of your project with ELITHNIC'}
 };
 
 function navigateTo(view){
+  if(CURRENT_USER && CURRENT_USER.role !== 'admin' && !allowedViewsForRole(CURRENT_USER.role).includes(view)){
+    view = 'dashboard';
+  }
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
   document.querySelectorAll('.view-section').forEach(s => s.classList.toggle('active', s.id === 'view-'+view));
-  const meta = VIEW_META[view];
+  const meta = VIEW_META[view] || VIEW_META.dashboard;
   document.getElementById('topbarTitle').textContent = meta.title;
   document.getElementById('topbarSub').textContent = meta.sub;
   closeSidebarMobile();
@@ -845,16 +1182,19 @@ function closeAllPanels(){
   document.getElementById('notifPanel').classList.remove('show');
 }
 
+
 /* ---------------------------------------------------------------------
    7. ENTITY CONFIG (drives generic CRUD forms across modules)
    --------------------------------------------------------------------- */
 function closerOptions(){ return getAll('closers').map(c=>({value:c.id,label:c.name})); }
 function dpOptions(){ return getAll('deliveryPartners').map(c=>({value:c.id,label:c.name})); }
 function freelancerOptions(){ return getAll('freelancers').map(c=>({value:c.id,label:c.name+' ('+c.skill+')'})); }
+function clientOptions(){ return getAll('clients').map(c=>({value:c.id,label:c.name})); }
 function leadOptions(){ return getAll('leads').map(c=>({value:c.id,label:c.clientName+' — '+c.service})); }
 function closerName(id){ const c=getById('closers',id); return c? c.name : '—'; }
 function dpName(id){ const c=getById('deliveryPartners',id); return c? c.name : '—'; }
 function freelancerName(id){ const c=getById('freelancers',id); return c? c.name : '—'; }
+function clientName(id){ const c=getById('clients',id); return c? c.name : '—'; }
 
 const ENTITY_CONFIG = {
   leads: { coll:'leads', label:'Lead', icon:'◎', idPrefix:'lead',
@@ -894,9 +1234,17 @@ const ENTITY_CONFIG = {
       {key:'rating', label:'Rating (1.0 – 5.0)', type:'number', min:1, max:5, step:0.1, default:5, col:6}
     ]
   },
+  clients: { coll:'clients', label:'Client', icon:'☻', idPrefix:'client',
+    fields:[
+      {key:'name', label:'Client / Business Name', type:'text', required:true, col:6},
+      {key:'whatsapp', label:'WhatsApp Number', type:'tel', col:6},
+      {key:'email', label:'Email Address', type:'email', col:6}
+    ]
+  },
   projects: { coll:'projects', label:'Project', icon:'▣', idPrefix:'proj',
     fields:[
       {key:'clientName', label:'Client Name', type:'text', required:true, col:6},
+      {key:'clientId', label:'Linked Client Account', type:'select', dynOptions:clientOptions, emptyLabel:'No client login linked', col:6},
       {key:'service', label:'Service', type:'select', options:SERVICES, col:6},
       {key:'leadId', label:'Source Lead', type:'select', dynOptions:leadOptions, emptyLabel:'No linked lead', col:6},
       {key:'closerId', label:'Closer', type:'select', dynOptions:closerOptions, emptyLabel:'Unassigned', col:6},
@@ -908,7 +1256,9 @@ const ENTITY_CONFIG = {
       {key:'closerCommission', label:'Closer Commission (₹)', type:'number', default:0, col:6},
       {key:'dpCommission', label:'Delivery Partner Commission (₹)', type:'number', default:0, col:6},
       {key:'deadline', label:'Deadline', type:'date', col:6},
-      {key:'status', label:'Status', type:'select', options:PROJECT_STATUSES, default:'Assigned', col:6}
+      {key:'status', label:'Status', type:'select', options:PROJECT_STATUSES, default:'Assigned', col:6},
+      {key:'closerCommissionPaid', label:'Closer commission has been paid out', type:'checkbox', col:6},
+      {key:'dpCommissionPaid', label:'Delivery partner commission has been paid out', type:'checkbox', col:6}
     ]
   }
 };
@@ -931,6 +1281,9 @@ function buildFieldHTML(field, record){
   const val = record && record[field.key] !== undefined ? record[field.key] : (field.default !== undefined ? field.default : '');
   const wrapStyle = field.col === 12 ? 'grid-column:1/-1;' : '';
   let inner = '';
+  if(field.type === 'checkbox'){
+    return '<div class="field check-field" style="'+wrapStyle+'"><input type="checkbox" id="f_'+field.key+'" '+(val?'checked':'')+'><label for="f_'+field.key+'">'+field.label+'</label></div>';
+  }
   if(field.type === 'select'){
     inner = '<select id="f_'+field.key+'">'+fieldOptionsHTML(field, val)+'</select>';
   }else if(field.type === 'textarea'){
@@ -962,17 +1315,29 @@ function openFormModal(entityKey, recordId){
       <button class="btn btn-primary" onclick="submitEntityForm()">${record?'Save Changes':'Create '+cfg.label}</button>
     </div>
   `);
+  if(entityKey === 'leads' && CURRENT_USER && CURRENT_USER.role === 'closer'){
+    const sel = document.getElementById('f_assignedCloserId');
+    if(sel){
+      sel.value = CURRENT_USER.entityId;
+      sel.disabled = true;
+      sel.closest('.field').style.opacity = '0.6';
+    }
+  }
 }
 
-function submitEntityForm(){
+async function submitEntityForm(){
   const entityKey = MODAL_STATE.entity;
   const cfg = ENTITY_CONFIG[entityKey];
   const data = {};
   for(const f of cfg.fields){
     const el = document.getElementById('f_'+f.key);
     if(!el) continue;
-    let v = el.value;
-    if(f.type === 'number') v = v === '' ? 0 : parseFloat(v);
+    let v;
+    if(f.type === 'checkbox'){ v = el.checked; }
+    else{
+      v = el.value;
+      if(f.type === 'number') v = v === '' ? 0 : parseFloat(v);
+    }
     if(f.required && (v === '' || v === null || v === undefined)){
       toast('"'+f.label+'" is required', 'error');
       el.focus();
@@ -982,20 +1347,52 @@ function submitEntityForm(){
   }
   let record;
   let isNew = !MODAL_STATE.recordId;
+  const before = isNew ? null : Object.assign({}, getById(cfg.coll, MODAL_STATE.recordId));
   if(isNew){
     record = Object.assign({ id: uid(cfg.idPrefix), createdDate: todayISO() }, data);
-    if(entityKey === 'projects'){ record.trackingId = nextTrackingId(); }
+    if(entityKey === 'projects'){ record.trackingId = await nextTrackingId(); }
   }else{
     record = Object.assign({}, getById(cfg.coll, MODAL_STATE.recordId), data);
   }
-  upsert(cfg.coll, record);
+  const submitBtn = document.querySelector('.modal-foot .btn-primary');
+  if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; }
+  try{
+    await upsert(cfg.coll, record);
+  }catch(err){
+    console.error('[Firestore] Save failed:', err.message);
+    toast('Could not save — check your connection and try again', 'error');
+    if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = isNew?'Create '+cfg.label:'Save Changes'; }
+    return;
+  }
 
   if(entityKey === 'leads'){
     logActivity('Lead', (isNew?'New lead created: ':'Lead updated: ')+record.clientName);
     if(isNew) pushNotification('New lead added: '+record.clientName, 'lead');
+    if(before && before.assignedCloserId !== record.assignedCloserId){
+      logActivity('Lead', 'Lead "'+record.clientName+'" assigned to '+closerName(record.assignedCloserId));
+    }
+    if(before && before.status !== record.status){
+      logActivity('Lead', 'Lead "'+record.clientName+'" status changed: '+before.status+' → '+record.status);
+    }
   }else if(entityKey === 'projects'){
     logActivity('Project', (isNew?'New project created: ':'Project updated: ')+record.clientName+' ('+record.trackingId+')');
     if(isNew) pushNotification('Project created for '+record.clientName+' — '+record.trackingId, 'project');
+    if(before){
+      if(before.status !== record.status){
+        logActivity('Project', 'Project '+record.trackingId+' status changed: '+before.status+' → '+record.status);
+        pushNotification('Project '+record.trackingId+' moved to '+record.status, 'project');
+      }
+      if(before.freelancerId !== record.freelancerId && record.freelancerId){
+        logActivity('Freelancer Assignment', freelancerName(record.freelancerId)+' assigned to project '+record.trackingId);
+      }
+      if(before.dpId !== record.dpId && record.dpId){
+        logActivity('Delivery Partner Assignment', dpName(record.dpId)+' assigned to project '+record.trackingId);
+      }
+      if((Number(before.advancePayment)||0) !== (Number(record.advancePayment)||0)){
+        logActivity('Payment', 'Advance payment updated for '+record.trackingId+': '+fmtMoney(record.advancePayment));
+        pushNotification('Payment received for '+record.clientName+' — '+fmtMoney(record.advancePayment), 'payment');
+      }
+    }
   }else{
     logActivity(cfg.label, (isNew?'New '+cfg.label+' added: ':cfg.label+' updated: ')+(record.name||record.clientName));
   }
@@ -1021,9 +1418,15 @@ function confirmDelete(entityKey, recordId, label){
     </div>
   `);
 }
-function doDelete(entityKey, recordId, label){
+async function doDelete(entityKey, recordId, label){
   const cfg = ENTITY_CONFIG[entityKey];
-  removeById(cfg.coll, recordId);
+  try{
+    await removeById(cfg.coll, recordId);
+  }catch(err){
+    console.error('[Firestore] Delete failed:', err.message);
+    toast('Could not delete — check your connection and try again', 'error');
+    return;
+  }
   logActivity(cfg.label, cfg.label+' deleted: '+label);
   closeModal();
   toast(cfg.label+' deleted', 'success');
@@ -1066,13 +1469,27 @@ function closerStats(closerId){
   const projects = getAll('projects').filter(p => p.closerId === closerId);
   const closedDeals = leads.filter(l => l.status === 'Closed').length;
   const totalCommission = projects.reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
-  return { totalLeads: leads.length, closedDeals, totalCommission, activeProjects: projects.filter(p=>p.status!=='Completed').length };
+  const paidCommission = projects.filter(p=>p.closerCommissionPaid).reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
+  const pendingCommission = totalCommission - paidCommission;
+  return {
+    totalLeads: leads.length, closedDeals, totalCommission, paidCommission, pendingCommission,
+    activeProjects: projects.filter(p=>p.status!=='Completed').length,
+    contactedLeads: leads.filter(l=>l.status==='Contacted').length,
+    lostLeads: leads.filter(l=>l.status==='Lost').length,
+    pendingLeads: leads.filter(l=>!['Closed','Lost'].includes(l.status)).length
+  };
 }
 function dpStats(dpId){
   const projects = getAll('projects').filter(p => p.dpId === dpId);
   const activeProjects = projects.filter(p => p.status !== 'Completed').length;
   const totalEarnings = projects.reduce((s,p)=>s+(Number(p.dpCommission)||0),0);
-  return { activeProjects, totalEarnings, totalProjects: projects.length };
+  const paidEarnings = projects.filter(p=>p.dpCommissionPaid).reduce((s,p)=>s+(Number(p.dpCommission)||0),0);
+  const pendingEarnings = totalEarnings - paidEarnings;
+  return {
+    activeProjects, totalEarnings, paidEarnings, pendingEarnings, totalProjects: projects.length,
+    deliveredProjects: projects.filter(p=>['Delivered','Completed'].includes(p.status)).length,
+    pendingDeliveries: projects.filter(p=>!['Delivered','Completed'].includes(p.status)).length
+  };
 }
 function freelancerStats(flId){
   const projects = getAll('projects').filter(p => p.freelancerId === flId);
@@ -1101,9 +1518,16 @@ function dashboardStats(){
 }
 
 /* ---------------------------------------------------------------------
-   10. DASHBOARD VIEW
+   10. DASHBOARD VIEW (role-aware entry point)
    --------------------------------------------------------------------- */
 function renderDashboard(){
+  if(!CURRENT_USER || CURRENT_USER.role === 'admin'){ renderAdminDashboard(); return; }
+  if(CURRENT_USER.role === 'closer'){ renderCloserDashboard(); return; }
+  if(CURRENT_USER.role === 'dp'){ renderDPDashboard(); return; }
+  if(CURRENT_USER.role === 'freelancer'){ renderFreelancerDashboard(); return; }
+  if(CURRENT_USER.role === 'client'){ renderClientDashboard(); return; }
+}
+function renderAdminDashboard(){
   const s = dashboardStats();
   const leads = getAll('leads').slice().sort((a,b)=> new Date(b.createdDate)-new Date(a.createdDate)).slice(0,5);
   const upcoming = getAll('projects').filter(p=>p.deadline && p.status!=='Completed')
@@ -1179,7 +1603,7 @@ function emptyState(ic, title, sub){
   return `<div class="empty-state"><div class="ic">${ic}</div><div class="t">${title}</div><div class="s">${sub}</div></div>`;
 }
 function activityItemHTML(a){
-  const icons = {Lead:'◎', Project:'▣', Closer:'◈', 'Delivery Partner':'◇', Freelancer:'✦', Settings:'⚙', System:'⚡', Payment:'$'};
+  const icons = {Lead:'◎', Project:'▣', Closer:'◈', 'Delivery Partner':'◇', Freelancer:'✦', Client:'☻', Settings:'⚙', System:'⚡', Payment:'$', 'Freelancer Assignment':'✦', 'Delivery Partner Assignment':'◇', User:'☻'};
   const ic = icons[a.type] || '•';
   return `<div class="activity-item">
     <div class="activity-ic bg-violet">${ic}</div>
@@ -1187,8 +1611,10 @@ function activityItemHTML(a){
   </div>`;
 }
 function renderNavBadges(){
-  document.getElementById('navLeadsBadge').textContent = getAll('leads').filter(l=>!['Closed','Lost'].includes(l.status)).length;
-  document.getElementById('navProjectsBadge').textContent = getAll('projects').filter(p=>p.status!=='Completed').length;
+  const leadsBadge = document.getElementById('navLeadsBadge');
+  const projectsBadge = document.getElementById('navProjectsBadge');
+  if(leadsBadge) leadsBadge.textContent = getAll('leads').filter(l=>!['Closed','Lost'].includes(l.status)).length;
+  if(projectsBadge) projectsBadge.textContent = getAll('projects').filter(p=>p.status!=='Completed').length;
 }
 
 /* ---------------------------------------------------------------------
@@ -1248,6 +1674,8 @@ function renderLeadsTable(){
 function openLeadDetails(id){
   const l = getById('leads', id);
   if(!l) return;
+  const canEdit = !CURRENT_USER || CURRENT_USER.role === 'admin' || (CURRENT_USER.role === 'closer' && l.assignedCloserId === CURRENT_USER.entityId);
+  const notes = l.notesLog || [];
   renderModal(`
     <div class="modal-head"><div class="modal-title">Lead Details</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="detail-row"><span>Client Name</span><span>${escapeHtml(l.clientName)}</span></div>
@@ -1260,11 +1688,29 @@ function openLeadDetails(id){
     <div class="detail-row"><span>Created</span><span>${fmtDate(l.createdDate)}</span></div>
     <div class="detail-section-title">Requirements</div>
     <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">${escapeHtml(l.requirements||'No additional notes provided.')}</p>
+    <div class="detail-section-title">Notes Log</div>
+    <div id="leadNotesLog">${notes.length ? notes.slice().reverse().map(n=>`<div class="mini-note">${escapeHtml(n.text)}<div class="mn-time">${fmtDateTime(n.date)}</div></div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No notes added yet.</p>'}</div>
+    ${canEdit ? `<div style="display:flex;gap:8px;margin-top:8px;">
+      <input type="text" id="newLeadNoteInput" placeholder="Add a note about this lead…" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">
+      <button class="btn btn-ghost btn-sm" onclick="addLeadNote('${l.id}')">Add</button>
+    </div>` : ''}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-      <button class="btn btn-primary" onclick="closeModal();openFormModal('leads','${l.id}')">Edit Lead</button>
+      ${canEdit ? `<button class="btn btn-primary" onclick="closeModal();openFormModal('leads','${l.id}')">Edit Lead</button>` : ''}
     </div>
   `);
+}
+async function addLeadNote(leadId){
+  const input = document.getElementById('newLeadNoteInput');
+  const text = input.value.trim();
+  if(!text) return;
+  const l = getById('leads', leadId);
+  if(!l) return;
+  l.notesLog = l.notesLog || [];
+  l.notesLog.push({ text, date: new Date().toISOString() });
+  await upsert('leads', l);
+  logActivity('Lead', 'Note added to lead "'+l.clientName+'"');
+  openLeadDetails(leadId);
 }
 
 /* ---------------------------------------------------------------------
@@ -1466,34 +1912,201 @@ function openProjectDetails(id){
   const p = getById('projects', id);
   if(!p) return;
   const fin = computeProjectFinancials(p);
-  renderModal(`
+  const role = CURRENT_USER ? CURRENT_USER.role : 'admin';
+  const deliverables = p.deliverables || [];
+
+  const headerHTML = `
     <div class="modal-head"><div class="modal-title">${p.trackingId} — Project Details</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="detail-row"><span>Client</span><span>${escapeHtml(p.clientName)}</span></div>
     <div class="detail-row"><span>Service</span><span>${escapeHtml(p.service||'—')}</span></div>
-    <div class="detail-row"><span>Delivery Partner</span><span>${escapeHtml(dpName(p.dpId))}</span></div>
-    <div class="detail-row"><span>Freelancer</span><span>${escapeHtml(freelancerName(p.freelancerId))}</span></div>
-    <div class="detail-row"><span>Closer</span><span>${escapeHtml(closerName(p.closerId))}</span></div>
     <div class="detail-row"><span>Deadline</span><span>${fmtDate(p.deadline)}</span></div>
     <div class="detail-row"><span>Status</span><span><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></span></div>
     <div style="margin:14px 0 6px;"><div class="progress-track"><div class="progress-fill" style="width:${projectProgressPercent(p.status)}%"></div></div></div>
+  `;
+  const deliverablesHTML = `
+    <div class="detail-section-title">Deliverables</div>
+    ${deliverables.length ? deliverables.map(d=>`<div class="deliv-item"><span>${escapeHtml(d.label)}</span>${d.link?`<a href="${escapeHtml(d.link)}" target="_blank" rel="noopener">Open ↗</a>`:''}</div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No deliverables uploaded yet.</p>'}
+  `;
+  const deliveryNoteHTML = p.deliveryNotes ? `<div class="detail-section-title">Delivery Notes</div><p style="font-size:13px;color:var(--text-dim);line-height:1.5;">${escapeHtml(p.deliveryNotes)}</p>` : '';
+  const revisionNoteHTML = p.revisionNotes ? `<div class="detail-section-title">Revision Notes</div><p style="font-size:13px;color:var(--text-dim);line-height:1.5;">${escapeHtml(p.revisionNotes)}</p>` : '';
 
-    <div class="detail-section-title">Financial Breakdown</div>
-    <div class="detail-row"><span>Total Project Value</span><span>${fmtMoney(fin.total)}</span></div>
-    <div class="detail-row"><span>Freelancer Cost</span><span>− ${fmtMoney(fin.flCost)}</span></div>
-    <div class="detail-row"><span>Closer Commission</span><span>− ${fmtMoney(fin.closerComm)}</span></div>
-    <div class="detail-row"><span>Delivery Partner Commission</span><span>− ${fmtMoney(fin.dpComm)}</span></div>
-    <div class="detail-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:10px;"><span style="font-weight:700;color:var(--text)">Agency Profit</span><span style="color:${fin.agencyProfit>=0?'var(--green)':'var(--red)'};font-size:15px;">${fmtMoney(fin.agencyProfit)}</span></div>
+  let bodyHTML = '', footHTML = `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`;
 
-    <div class="detail-section-title">Payment Status</div>
-    <div class="detail-row"><span>Advance Received</span><span>${fmtMoney(fin.adv)}</span></div>
-    <div class="detail-row"><span>Remaining Due</span><span>${fmtMoney(fin.remaining)}</span></div>
-    <div class="detail-row"><span>Payment Status</span><span><span class="badge ${badgeClassFor(fin.paymentStatus)}">${fin.paymentStatus}</span></span></div>
+  if(role === 'admin'){
+    bodyHTML = `
+      <div class="detail-row"><span>Delivery Partner</span><span>${escapeHtml(dpName(p.dpId))}</span></div>
+      <div class="detail-row"><span>Freelancer</span><span>${escapeHtml(freelancerName(p.freelancerId))}</span></div>
+      <div class="detail-row"><span>Closer</span><span>${escapeHtml(closerName(p.closerId))}</span></div>
+      <div class="detail-row"><span>Client Account</span><span>${escapeHtml(clientName(p.clientId))}</span></div>
+      <div class="detail-section-title">Financial Breakdown</div>
+      <div class="detail-row"><span>Total Project Value</span><span>${fmtMoney(fin.total)}</span></div>
+      <div class="detail-row"><span>Freelancer Cost</span><span>− ${fmtMoney(fin.flCost)}</span></div>
+      <div class="detail-row"><span>Closer Commission</span><span>− ${fmtMoney(fin.closerComm)} ${p.closerCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
+      <div class="detail-row"><span>Delivery Partner Commission</span><span>− ${fmtMoney(fin.dpComm)} ${p.dpCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
+      <div class="detail-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:10px;"><span style="font-weight:700;color:var(--text)">Agency Profit</span><span style="color:${fin.agencyProfit>=0?'var(--green)':'var(--red)'};font-size:15px;">${fmtMoney(fin.agencyProfit)}</span></div>
+      <div class="detail-section-title">Payment Status</div>
+      <div class="detail-row"><span>Advance Received</span><span>${fmtMoney(fin.adv)}</span></div>
+      <div class="detail-row"><span>Remaining Due</span><span>${fmtMoney(fin.remaining)}</span></div>
+      <div class="detail-row"><span>Payment Status</span><span><span class="badge ${badgeClassFor(fin.paymentStatus)}">${fin.paymentStatus}</span></span></div>
+      ${deliverablesHTML}${deliveryNoteHTML}${revisionNoteHTML}
+    `;
+    footHTML = `<button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();openFormModal('projects','${p.id}')">Edit Project</button>`;
+  }else if(role === 'closer'){
+    bodyHTML = `
+      <div class="detail-row"><span>Total Project Value</span><span>${fmtMoney(fin.total)}</span></div>
+      <div class="detail-section-title">Your Commission</div>
+      <div class="detail-row"><span>Commission Amount</span><span>${fmtMoney(fin.closerComm)}</span></div>
+      <div class="detail-row"><span>Payout Status</span><span>${p.closerCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
+    `;
+  }else if(role === 'dp'){
+    const statusOptions = PROJECT_STATUSES.filter(s=>s!=='Completed');
+    bodyHTML = `
+      <div class="detail-row"><span>Freelancer Assigned</span><span>${escapeHtml(freelancerName(p.freelancerId))}</span></div>
+      <div class="detail-section-title">Your Earnings</div>
+      <div class="detail-row"><span>Commission Amount</span><span>${fmtMoney(fin.dpComm)}</span></div>
+      <div class="detail-row"><span>Payout Status</span><span>${p.dpCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
+      ${deliverablesHTML}
+      <div class="detail-section-title">Assign Freelancer</div>
+      <div style="display:flex;gap:8px;">
+        <select id="dpFreelancerSelect" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">${fieldOptionsHTML({dynOptions:freelancerOptions, emptyLabel:'Unassigned'}, p.freelancerId)}</select>
+        <button class="btn btn-ghost btn-sm" onclick="dpAssignFreelancer('${p.id}')">Assign</button>
+      </div>
+      <div class="detail-section-title">Update Status</div>
+      <div style="display:flex;gap:8px;">
+        <select id="dpStatusSelect" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">
+          ${statusOptions.map(s=>`<option value="${s}" ${s===p.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="dpUpdateStatus('${p.id}')">Update</button>
+      </div>
+      <div class="detail-section-title">Delivery Notes</div>
+      <textarea id="dpDeliveryNoteInput" placeholder="Add a note for the agency or client…" style="width:100%;min-height:70px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;">${escapeHtml(p.deliveryNotes||'')}</textarea>
+      <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" onclick="saveDeliveryNote('${p.id}')">Save Note</button></div>
+    `;
+  }else if(role === 'freelancer'){
+    bodyHTML = `
+      <div class="detail-section-title">Your Payout</div>
+      <div class="detail-row"><span>Amount for this project</span><span>${fmtMoney(fin.flCost)}</span></div>
+      ${deliverablesHTML}
+      <div class="detail-section-title">Update Progress</div>
+      <div style="display:flex;gap:8px;">
+        <select id="flStatusSelect" style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">
+          ${['In Progress','Revision'].map(s=>`<option value="${s}" ${s===p.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="freelancerUpdateStatus('${p.id}')">Update</button>
+      </div>
+      <div class="detail-section-title">Upload Deliverable</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="flDelivLabel" placeholder="Deliverable name" style="flex:1;min-width:140px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">
+        <input type="text" id="flDelivLink" placeholder="Link / file URL" style="flex:1;min-width:140px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;">
+        <button class="btn btn-ghost btn-sm" onclick="addDeliverable('${p.id}')">Add</button>
+      </div>
+      <div class="detail-section-title">Revision Notes</div>
+      <textarea id="flRevisionNoteInput" placeholder="Add a revision note…" style="width:100%;min-height:60px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;">${escapeHtml(p.revisionNotes||'')}</textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="addRevisionNote('${p.id}')">Save Note</button>
+        <button class="btn btn-primary btn-sm" onclick="markTaskComplete('${p.id}')">Mark Complete</button>
+      </div>
+    `;
+  }else if(role === 'client'){
+    bodyHTML = `
+      <div class="detail-row"><span>Tracking ID</span><span>${p.trackingId}</span></div>
+      <div class="detail-section-title">Payment</div>
+      <div class="detail-row"><span>Total Project Value</span><span>${fmtMoney(fin.total)}</span></div>
+      <div class="detail-row"><span>Advance Paid</span><span>${fmtMoney(fin.adv)}</span></div>
+      <div class="detail-row"><span>Remaining Due</span><span>${fmtMoney(fin.remaining)}</span></div>
+      <div class="detail-row"><span>Payment Status</span><span><span class="badge ${badgeClassFor(fin.paymentStatus)}">${fin.paymentStatus}</span></span></div>
+      ${deliverablesHTML}${revisionNoteHTML}
+    `;
+  }
 
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-      <button class="btn btn-primary" onclick="closeModal();openFormModal('projects','${p.id}')">Edit Project</button>
-    </div>
-  `);
+  renderModal(headerHTML + bodyHTML + `<div class="modal-foot">${footHTML}</div>`);
+}
+async function dpAssignFreelancer(projectId){
+  const p = getById('projects', projectId);
+  const flId = document.getElementById('dpFreelancerSelect').value;
+  if(!p) return;
+  p.freelancerId = flId || null;
+  await upsert('projects', p);
+  if(flId) logActivity('Freelancer Assignment', freelancerName(flId)+' assigned to project '+p.trackingId+' by delivery partner');
+  toast('Freelancer assignment updated', 'success');
+  openProjectDetails(projectId);
+  renderAll();
+}
+async function dpUpdateStatus(projectId){
+  const p = getById('projects', projectId);
+  const newStatus = document.getElementById('dpStatusSelect').value;
+  if(!p) return;
+  const before = p.status;
+  p.status = newStatus;
+  await upsert('projects', p);
+  if(before !== newStatus){
+    logActivity('Project', 'Project '+p.trackingId+' status changed: '+before+' → '+newStatus+' (by delivery partner)');
+    pushNotification('Project '+p.trackingId+' moved to '+newStatus, 'project');
+  }
+  toast('Status updated', 'success');
+  openProjectDetails(projectId);
+  renderAll();
+}
+async function saveDeliveryNote(projectId){
+  const p = getById('projects', projectId);
+  const text = document.getElementById('dpDeliveryNoteInput').value.trim();
+  if(!p) return;
+  p.deliveryNotes = text;
+  await upsert('projects', p);
+  logActivity('Project', 'Delivery note updated for project '+p.trackingId);
+  toast('Delivery note saved', 'success');
+  openProjectDetails(projectId);
+}
+async function freelancerUpdateStatus(projectId){
+  const p = getById('projects', projectId);
+  const newStatus = document.getElementById('flStatusSelect').value;
+  if(!p) return;
+  const before = p.status;
+  p.status = newStatus;
+  await upsert('projects', p);
+  if(before !== newStatus){
+    logActivity('Project', 'Project '+p.trackingId+' status changed: '+before+' → '+newStatus+' (by freelancer)');
+  }
+  toast('Progress updated', 'success');
+  openProjectDetails(projectId);
+  renderAll();
+}
+async function addDeliverable(projectId){
+  const p = getById('projects', projectId);
+  const label = document.getElementById('flDelivLabel').value.trim();
+  const link = document.getElementById('flDelivLink').value.trim();
+  if(!p || !label) { toast('Please name the deliverable', 'error'); return; }
+  p.deliverables = p.deliverables || [];
+  p.deliverables.push({ label, link, date: new Date().toISOString() });
+  await upsert('projects', p);
+  logActivity('Project', 'Deliverable "'+label+'" uploaded for project '+p.trackingId);
+  pushNotification('New deliverable uploaded for '+p.clientName+' — '+p.trackingId, 'project');
+  toast('Deliverable added', 'success');
+  openProjectDetails(projectId);
+}
+async function addRevisionNote(projectId){
+  const p = getById('projects', projectId);
+  const text = document.getElementById('flRevisionNoteInput').value.trim();
+  if(!p) return;
+  p.revisionNotes = text;
+  await upsert('projects', p);
+  logActivity('Project', 'Revision note updated for project '+p.trackingId);
+  toast('Revision note saved', 'success');
+  openProjectDetails(projectId);
+}
+async function markTaskComplete(projectId){
+  const p = getById('projects', projectId);
+  if(!p) return;
+  const before = p.status;
+  p.status = 'Delivered';
+  await upsert('projects', p);
+  if(before !== 'Delivered'){
+    logActivity('Project', 'Freelancer marked their task complete on project '+p.trackingId+' — status set to Delivered');
+    pushNotification('Project '+p.trackingId+' delivered by freelancer', 'project');
+  }
+  toast('Marked as delivered', 'success');
+  openProjectDetails(projectId);
+  renderAll();
 }
 
 /* ---------------------------------------------------------------------
@@ -1597,7 +2210,7 @@ function onKanbanDragStart(e){
 function onKanbanDragEnd(e){ e.target.classList.remove('dragging'); }
 function onKanbanDragOver(e){ e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
 function onKanbanDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
-function onKanbanDrop(e, col){
+async function onKanbanDrop(e, col){
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
   if(!DRAGGED) return;
@@ -1607,7 +2220,7 @@ function onKanbanDrop(e, col){
     }else{
       const lead = getById('leads', DRAGGED.id);
       if(lead && lead.status !== col){
-        lead.status = col; upsert('leads', lead);
+        lead.status = col; await upsert('leads', lead);
         logActivity('Lead', 'Lead "'+lead.clientName+'" moved to '+col);
         toast('Lead moved to '+col, 'success');
       }
@@ -1620,7 +2233,7 @@ function onKanbanDrop(e, col){
       if(proj){
         const newStatus = col === 'Completed' ? 'Completed' : 'Delivered';
         if(proj.status !== newStatus){
-          proj.status = newStatus; upsert('projects', proj);
+          proj.status = newStatus; await upsert('projects', proj);
           logActivity('Project', 'Project '+proj.trackingId+' moved to '+col);
           toast('Project moved to '+col, 'success');
         }
@@ -1860,7 +2473,7 @@ function renderNotifDot(){
   const unread = getAll('notifications').filter(n=>!n.read).length;
   document.getElementById('notifDot').style.display = unread ? 'block' : 'none';
 }
-function toggleNotifPanel(){
+async function toggleNotifPanel(){
   const panel = document.getElementById('notifPanel');
   const show = !panel.classList.contains('show');
   panel.classList.toggle('show', show);
@@ -1871,26 +2484,31 @@ function toggleNotifPanel(){
         <div class="ni-msg">${escapeHtml(n.message)}</div>
         <div class="ni-time">${fmtDateTime(n.timestamp)}</div>
       </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--text-faint);font-size:12.5px;">No notifications yet</div>';
+    const unread = notifs.filter(n=>!n.read);
     notifs.forEach(n=>n.read=true);
-    saveDB();
+    saveLocalCache();
+    if(unread.length) await bulkWriteRecords({ notifications: notifs });
   }
   renderNotifDot();
 }
-function markNotifRead(id){
+async function markNotifRead(id){
   const n = getAll('notifications').find(x=>x.id===id);
-  if(n){ n.read = true; saveDB(); }
+  if(n && !n.read){ n.read = true; await upsert('notifications', n); }
 }
-function checkDeadlineReminders(){
-  const projects = getAll('projects').filter(p=>p.status!=='Completed' && p.deadline);
+async function checkDeadlineReminders(){
+  const projects = scopedProjects().filter(p=>p.status!=='Completed' && p.deadline);
+  let changed = false;
   projects.forEach(p=>{
     const days = daysBetween(todayISO(), p.deadline);
     const flagKey = '_deadlineNotified_'+p.id;
     if(days <= 2 && days >= 0 && !DB.meta[flagKey]){
       pushNotification('Deadline approaching for '+p.clientName+' ('+p.trackingId+') — '+(days===0?'today':days+' day(s) left'), 'deadline');
       DB.meta[flagKey] = true;
+      changed = true;
     }
   });
-  saveDB();
+  saveLocalCache();
+  if(changed) await persistSystemConfig();
 }
 
 /* ---------------------------------------------------------------------
@@ -1959,9 +2577,18 @@ function handleImportFile(e){
   reader.readAsText(file);
   e.target.value = '';
 }
-function doRestore(){
-  DB = window._pendingRestore;
-  saveDB();
+async function doRestore(){
+  toast('Restoring backup — this may take a few seconds…', 'info');
+  const restored = window._pendingRestore;
+  await wipeFirestoreCollections(FS_COLLECTIONS);
+  const recordsByCollection = {};
+  FS_COLLECTIONS.forEach(coll => { recordsByCollection[coll] = restored[coll] || []; });
+  DB = defaultDB();
+  await bulkWriteRecords(recordsByCollection);
+  DB.auth = restored.auth || DB.auth;
+  DB.counters = restored.counters || DB.counters;
+  DB.meta = restored.meta || DB.meta;
+  await persistSystemConfig();
   closeModal();
   toast('Database restored from backup', 'success');
   logActivity('System', 'Database restored from backup file');
@@ -1977,13 +2604,15 @@ function resetDatabase(){
       <button class="btn btn-danger" onclick="doResetDatabase()">Reset Database</button>
     </div>`);
 }
-function doResetDatabase(){
+async function doResetDatabase(){
   const val = document.getElementById('resetConfirmInput').value.trim();
   if(val !== 'RESET'){ toast('Please type RESET to confirm', 'error'); return; }
+  toast('Resetting database — this may take a few seconds…', 'info');
   const authBackup = DB.auth;
+  await wipeFirestoreCollections(FS_COLLECTIONS);
   DB = defaultDB();
   DB.auth = authBackup;
-  saveDB();
+  await persistSystemConfig();
   closeModal();
   toast('Database reset successfully', 'success');
   logActivity('System', 'Entire database was reset');
@@ -2001,17 +2630,27 @@ function renderBackupView(){
       <div class="panel-head"><div class="panel-title">Backup &amp; Restore</div></div>
       <div class="settings-row"><div><div class="s-title">Backup Database</div><div class="s-sub">Download a complete JSON snapshot of every record in ELITHNIC</div></div><button class="btn btn-ghost btn-sm" onclick="backupJSON()">⬇ Download Backup</button></div>
       <div class="settings-row"><div><div class="s-title">Import / Restore Backup</div><div class="s-sub">Restore your workspace from a previously exported JSON backup</div></div><button class="btn btn-ghost btn-sm" onclick="triggerImport()">⬆ Import Backup</button></div>
-      <div class="settings-row"><div><div class="s-title">Reset Entire Database</div><div class="s-sub">Permanently erase all data and start fresh</div></div><button class="btn btn-danger btn-sm" onclick="resetDatabase()">Reset Database</button></div>
+      <div class="settings-row"><div><div class="s-title">Reset Demo Data</div><div class="s-sub">Regenerate a fresh set of 50 leads, 20 projects and all demo users (CL/DP/FR/CT 01–10)</div></div><button class="btn btn-ghost btn-sm" onclick="confirmResetDemoData()">Reset Demo Data</button></div>
+      <div class="settings-row"><div><div class="s-title">Reset Entire Database</div><div class="s-sub">Permanently erase all data and start fresh (empty workspace)</div></div><button class="btn btn-danger btn-sm" onclick="resetDatabase()">Reset Database</button></div>
     </div>
     <input type="file" id="importFileInput" accept="application/json" class="hidden" onchange="handleImportFile(event)">
   `;
 }
 
 /* ---------------------------------------------------------------------
-   23. SETTINGS VIEW
+   23. SETTINGS VIEW (role-aware)
    --------------------------------------------------------------------- */
 function renderSettingsView(){
+  const u = CURRENT_USER;
+  const isAdmin = u.role === 'admin';
   document.getElementById('view-settings').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Account</div></div>
+      <div class="detail-row"><span>Name</span><span>${escapeHtml(u.name)}</span></div>
+      <div class="detail-row"><span>Username</span><span>${escapeHtml(u.loginId)}</span></div>
+      <div class="detail-row"><span>Role</span><span><span class="role-pill role-${u.role}">${ROLE_LABELS[u.role]}</span></span></div>
+      ${!isAdmin ? `<div class="detail-row"><span>Linked Record</span><span>${escapeHtml(entityNameForUser(u))}</span></div>` : ''}
+    </div>
     <div class="panel glass">
       <div class="panel-head"><div class="panel-title">Change Password</div></div>
       <div class="field"><label>Current Password</label><input type="password" id="settingsCurPass"></div>
@@ -2021,9 +2660,10 @@ function renderSettingsView(){
       </div>
       <button class="btn btn-primary" onclick="handleChangePassword()">Update Password</button>
     </div>
+    ${isAdmin ? `
     <div class="panel glass">
       <div class="panel-head"><div class="panel-title">Recovery Key</div></div>
-      <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Your recovery key lets you reset your password if you ever forget it. Anyone shown this key earlier should keep it safe — for security it isn't displayed again here.</p>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Your recovery key lets you reset the admin password if you ever forget it. Anyone shown this key earlier should keep it safe — for security it isn't displayed again here.</p>
       <button class="btn btn-ghost btn-sm" onclick="regenerateRecoveryKey()">Generate New Recovery Key</button>
     </div>
     <div class="panel glass">
@@ -2031,14 +2671,14 @@ function renderSettingsView(){
       <div class="settings-row"><div><div class="s-title">Agency</div><div class="s-sub">ELITHNIC — Outsourcing &amp; Delivery Platform</div></div></div>
       <div class="settings-row"><div><div class="s-title">Data Storage</div><div class="s-sub">All data is stored locally in this browser via localStorage</div></div></div>
       <div class="settings-row"><div><div class="s-title">Quick Actions</div><div class="s-sub">Manage backups and data resets</div></div><button class="btn btn-ghost btn-sm" onclick="navigateTo('backup')">Go to Backup &amp; Export</button></div>
-    </div>
+    </div>` : ''}
   `;
 }
 function regenerateRecoveryKey(){
   const newKey = randomRecoveryKey();
-  sha256(newKey).then(hash=>{
+  sha256(newKey).then(async hash=>{
     DB.auth.recoveryKeyHash = hash;
-    saveDB();
+    await persistSystemConfig();
     renderModal(`
       <div class="modal-head"><div class="modal-title">New Recovery Key</div><button class="modal-close" onclick="closeModal()">✕</button></div>
       <p style="font-size:13px;color:var(--text-dim);">Save this key somewhere safe. Your previous recovery key is no longer valid.</p>
@@ -2084,9 +2724,561 @@ function handleTrackLookup(){
 }
 
 /* ---------------------------------------------------------------------
+   25. DEMO DATA GENERATION
+   --------------------------------------------------------------------- */
+const DEMO_FIRST_NAMES = ['Rahul','Priya','Amit','Sneha','Vikram','Anjali','Karan','Pooja','Rohan','Neha','Arjun','Divya','Sanjay','Kavya','Manish','Riya','Suresh','Anita','Deepak','Megha'];
+const DEMO_LAST_NAMES = ['Sharma','Verma','Gupta','Mehta','Singh','Kapoor','Iyer','Patel','Nair','Reddy','Joshi','Chopra','Malhotra','Bansal','Agarwal','Rao'];
+const DEMO_BUSINESS_NAMES = ['Bright Bakers Co','Nova Fitness Studio','Urban Threads Apparel','GreenLeaf Organics','Skyline Realty Group','Pixel Forge Studio','Wanderlust Travels','Silver Spoon Cafe','Quantum Tech Labs','Bloom & Co Florists','Northstar Logistics','Velvet Interiors','Crimson Sports Academy','Lucent Solar Solutions','Maple & Co Bakery','Apex Fitness Hub','Coral Reef Resorts','Ember Grill House','Vista Realtors','Zenith Consulting','Aurora Wellness Spa','Trail Blaze Adventures','Golden Gate Imports','Marble & Co Designs','Sunrise Dairy Farms'];
+
+function randPhone(){
+  let n = '+91' + (6+Math.floor(Math.random()*4));
+  for(let i=0;i<9;i++) n += Math.floor(Math.random()*10);
+  return n;
+}
+function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randomInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
+function dateOffset(days){
+  const d = new Date();
+  d.setDate(d.getDate()+days);
+  return d.toISOString().slice(0,10);
+}
+
+async function generateDemoData(){
+  const closerRecords = [];
+  const userRecords = [];
+  for(let i=1;i<=10;i++){
+    const name = DEMO_FIRST_NAMES[i-1]+' '+randomChoice(DEMO_LAST_NAMES);
+    const rec = { id: uid('closer'), name, whatsapp: randPhone(), email: slug(name)+'@elithnic.in', commissionRate: randomChoice([8,10,12,15]), createdDate: dateOffset(-randomInt(10,60)) };
+    closerRecords.push(rec);
+    userRecords.push({ id: uid('user'), role:'closer', loginId:'CL'+pad(i,2), passwordHash: await sha256(pad(i,4)), name, entityId: rec.id, status:'active', createdDate: todayISO() });
+  }
+  const dpRecords = [];
+  for(let i=1;i<=10;i++){
+    const name = DEMO_FIRST_NAMES[(i+4)%DEMO_FIRST_NAMES.length]+' '+randomChoice(DEMO_LAST_NAMES);
+    const rec = { id: uid('dp'), name, whatsapp: randPhone(), email: slug(name)+'@elithnic.in', commissionRate: randomChoice([10,12,15,18]), createdDate: dateOffset(-randomInt(10,60)) };
+    dpRecords.push(rec);
+    userRecords.push({ id: uid('user'), role:'dp', loginId:'DP'+pad(i,2), passwordHash: await sha256(String(1000+i)), name, entityId: rec.id, status:'active', createdDate: todayISO() });
+  }
+  const freelancerRecords = [];
+  for(let i=1;i<=10;i++){
+    const name = DEMO_FIRST_NAMES[(i+9)%DEMO_FIRST_NAMES.length]+' '+randomChoice(DEMO_LAST_NAMES);
+    const rec = { id: uid('fl'), name, skill: SKILLS[(i-1)%SKILLS.length], whatsapp: randPhone(), email: slug(name)+'@elithnic.in', rating: Number((3.5+Math.random()*1.5).toFixed(1)), createdDate: dateOffset(-randomInt(10,60)) };
+    freelancerRecords.push(rec);
+    userRecords.push({ id: uid('user'), role:'freelancer', loginId:'FR'+pad(i,2), passwordHash: await sha256(String(2000+i)), name, entityId: rec.id, status:'active', createdDate: todayISO() });
+  }
+  const clientRecords = [];
+  const businessPool = shuffleArray(DEMO_BUSINESS_NAMES);
+  for(let i=1;i<=10;i++){
+    const name = businessPool[i-1];
+    const rec = { id: uid('client'), name, whatsapp: randPhone(), email: slug(name).slice(0,16)+'@client.in', createdDate: dateOffset(-randomInt(5,50)) };
+    clientRecords.push(rec);
+    userRecords.push({ id: uid('user'), role:'client', loginId:'CT'+pad(i,2), passwordHash: await sha256(String(3000+i)), name, entityId: rec.id, status:'active', createdDate: todayISO() });
+  }
+
+  const leadRecords = [];
+  const statusPool = ['New Lead','New Lead','New Lead','Contacted','Contacted','Contacted','Follow Up','Follow Up','Negotiation','Closed','Lost'];
+  const leadBusinessPool = shuffleArray([...DEMO_BUSINESS_NAMES, ...DEMO_BUSINESS_NAMES]);
+  for(let i=1;i<=50;i++){
+    const closer = closerRecords[i % closerRecords.length];
+    const status = randomChoice(statusPool);
+    const name = leadBusinessPool[(i-1)%leadBusinessPool.length] + (i > DEMO_BUSINESS_NAMES.length ? ' '+i : '');
+    leadRecords.push({
+      id: uid('lead'), clientName: name, whatsapp: randPhone(), email: slug(name).slice(0,18)+'@lead.in',
+      service: randomChoice(SERVICES), budget: randomInt(8,120)*1000,
+      requirements: 'Looking for '+randomChoice(SERVICES).toLowerCase()+' support for an upcoming launch.',
+      assignedCloserId: closer.id, status, notesLog: [], createdDate: dateOffset(-randomInt(0,55))
+    });
+  }
+
+  const projectRecords = [];
+  const projStatusPool = ['Assigned','Assigned','Assigned','Freelancer Assigned','Freelancer Assigned','Freelancer Assigned','In Progress','In Progress','In Progress','In Progress','In Progress','Revision','Revision','Delivered','Delivered','Delivered','Completed','Completed','Completed','Completed'];
+  let trackingCounter = DB.counters.project || 1000;
+  for(let i=1;i<=20;i++){
+    const client = clientRecords[i % clientRecords.length];
+    const dp = dpRecords[i % dpRecords.length];
+    const fl = freelancerRecords[i % freelancerRecords.length];
+    const closer = closerRecords[(i+3) % closerRecords.length];
+    const status = projStatusPool[i-1];
+    const total = randomInt(15,150)*1000;
+    const flCost = Math.round(total * (0.18+Math.random()*0.12));
+    const closerComm = Math.round(total * 0.08);
+    const dpComm = Math.round(total * 0.12);
+    const advancePct = status === 'Completed' ? 1 : (status === 'Assigned' ? randomChoice([0,0.3,0.5]) : randomChoice([0.3,0.5,0.7,1]));
+    const advance = Math.round(total * advancePct);
+    const deadlineOffset = status === 'Completed' ? -randomInt(1,30) : randomInt(-5,25);
+    trackingCounter++;
+    projectRecords.push({
+      id: uid('proj'), trackingId: 'ELI-'+trackingCounter, clientName: client.name, clientId: client.id,
+      service: randomChoice(SERVICES), leadId: null, closerId: closer.id, dpId: dp.id, freelancerId: fl.id,
+      totalPrice: total, advancePayment: advance, freelancerCost: flCost, closerCommission: closerComm, dpCommission: dpComm,
+      closerCommissionPaid: status === 'Completed' ? Math.random() > 0.3 : Math.random() > 0.7,
+      dpCommissionPaid: status === 'Completed' ? Math.random() > 0.3 : Math.random() > 0.7,
+      deadline: dateOffset(deadlineOffset), status,
+      deliverables: status !== 'Assigned' ? [{ label:'Initial draft', link:'', date: dateOffset(-randomInt(1,10)) }] : [],
+      deliveryNotes: '', revisionNotes: status === 'Revision' ? 'Client requested minor color and copy adjustments.' : '',
+      createdDate: dateOffset(-randomInt(3,50))
+    });
+  }
+  DB.counters.project = trackingCounter;
+
+  await bulkWriteRecords({
+    closers: closerRecords, deliveryPartners: dpRecords, freelancers: freelancerRecords, clients: clientRecords,
+    users: userRecords, leads: leadRecords, projects: projectRecords
+  });
+  await persistSystemConfig();
+  logActivity('System', 'Demo data generated: 50 leads, 20 projects, 10 closers, 10 delivery partners, 10 freelancers, 10 clients');
+}
+function confirmResetDemoData(){
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Reset Demo Data?</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13.5px;color:var(--text-dim);line-height:1.5;">This will replace all leads, projects, closers, delivery partners, freelancers, clients and their login accounts with a fresh demo set. Your admin account is kept. This cannot be undone.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doResetDemoData()">Reset Demo Data</button>
+    </div>`);
+}
+async function doResetDemoData(){
+  toast('Resetting demo data — this may take a few seconds…', 'info');
+  const adminUsers = getAll('users').filter(u=>u.role==='admin');
+  await wipeFirestoreCollections(['leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications']);
+  const nonAdminUserSnap = await fsdb.collection('users').get();
+  const nonAdminDocs = nonAdminUserSnap.docs.filter(d => d.data().role !== 'admin');
+  for(let i=0;i<nonAdminDocs.length;i+=450){
+    const batch = fsdb.batch();
+    nonAdminDocs.slice(i,i+450).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+  DB.leads = []; DB.closers = []; DB.deliveryPartners = []; DB.freelancers = []; DB.clients = []; DB.projects = []; DB.activities = []; DB.notifications = [];
+  DB.users = adminUsers;
+  DB.counters.lead=0; DB.counters.closer=0; DB.counters.dp=0; DB.counters.freelancer=0; DB.counters.client=0; DB.counters.project=1000;
+  await persistSystemConfig();
+  await generateDemoData();
+  closeModal();
+  toast('Demo data regenerated successfully', 'success');
+  logActivity('System', 'Demo data was reset by admin');
+  renderAll();
+}
+
+/* ---------------------------------------------------------------------
+   26. CLOSER ROLE — DASHBOARD, MY LEADS, MY DEALS
+   --------------------------------------------------------------------- */
+function renderCloserDashboard(){
+  const st = closerStats(CURRENT_USER.entityId);
+  const leads = scopedLeads().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  const deals = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  const statCards = [
+    {label:'Total Leads', val:st.totalLeads, ic:'◎', bg:'bg-blue'},
+    {label:'Contacted', val:st.contactedLeads, ic:'☎', bg:'bg-amber'},
+    {label:'Closed Deals', val:st.closedDeals, ic:'✓', bg:'bg-green'},
+    {label:'Lost Leads', val:st.lostLeads, ic:'✕', bg:'bg-red'},
+    {label:'Pending Leads', val:st.pendingLeads, ic:'⏱', bg:'bg-violet'},
+    {label:'Total Commission', val:fmtMoney(st.totalCommission), ic:'$', bg:'bg-green'},
+    {label:'Paid Commission', val:fmtMoney(st.paidCommission), ic:'✓', bg:'bg-green'},
+    {label:'Pending Commission', val:fmtMoney(st.pendingCommission), ic:'!', bg:'bg-amber'}
+  ];
+  document.getElementById('view-dashboard').innerHTML = `
+    <div class="stat-grid">${statCards.map(c=>`<div class="stat-card glass"><div class="ic-badge ${c.bg}">${c.ic}</div><div class="stat-val">${c.val}</div><div class="stat-label">${c.label}</div></div>`).join('')}</div>
+    <div class="dash-grid2">
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">My Recent Leads</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('myleads')">View All</button></div></div>
+        ${leads.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Status</th></tr></thead><tbody>
+          ${leads.slice(0,5).map(l=>`<tr><td class="cell-strong" style="cursor:pointer" onclick="openLeadDetails('${l.id}')">${escapeHtml(l.clientName)}</td><td>${escapeHtml(l.service||'—')}</td><td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td></tr>`).join('')}
+        </tbody></table></div>` : emptyState('◎','No leads assigned yet','Leads assigned to you by the admin will appear here.')}
+      </div>
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">My Deals</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('mydeals')">View All</button></div></div>
+        ${deals.length ? deals.slice(0,5).map(p=>`<div class="detail-row"><span>${escapeHtml(p.clientName)} <span class="cell-dim">(${p.trackingId})</span></span><span>${fmtMoney(p.closerCommission)}</span></div>`).join('') : emptyState('$','No deals yet','Projects tied to your closed leads will show up here.')}
+      </div>
+    </div>
+  `;
+}
+function renderMyLeadsView(){
+  document.getElementById('view-myleads').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">My Leads <span class="sm">${scopedLeads().length} total</span></div>
+        <div class="panel-actions"><button class="btn btn-primary btn-sm" onclick="openMyLeadFormModal()">+ Add Lead</button></div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span class="ic">⌕</span><input type="text" placeholder="Search my leads…" id="myLeadSearchInput" oninput="FILTERS.myleads=FILTERS.myleads||{};FILTERS.myleads.q=this.value;renderMyLeadsTable();"></div>
+        <select class="filter-select" id="myLeadStatusFilter" onchange="FILTERS.myleads=FILTERS.myleads||{};FILTERS.myleads.status=this.value;renderMyLeadsTable();">
+          <option value="">All Statuses</option>
+          ${LEAD_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div id="myLeadsTableWrap"></div>
+    </div>
+  `;
+  renderMyLeadsTable();
+}
+function renderMyLeadsTable(){
+  const f = FILTERS.myleads || {};
+  let rows = scopedLeads().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  if(f.q) rows = rows.filter(l => (l.clientName+l.whatsapp+(l.email||'')).toLowerCase().includes(f.q.toLowerCase()));
+  if(f.status) rows = rows.filter(l => l.status === f.status);
+  const wrap = document.getElementById('myLeadsTableWrap');
+  if(!rows.length){ wrap.innerHTML = emptyState('◎','No leads found','Leads assigned to you will appear here.'); return; }
+  wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Client</th><th>Contact</th><th>Service</th><th>Budget</th><th>Status</th><th>Created</th><th></th>
+  </tr></thead><tbody>
+    ${rows.map(l=>`<tr>
+      <td class="cell-strong" style="cursor:pointer" onclick="openLeadDetails('${l.id}')">${escapeHtml(l.clientName)}</td>
+      <td><div>${escapeHtml(l.whatsapp)}</div><div class="cell-dim">${escapeHtml(l.email||'')}</div></td>
+      <td>${escapeHtml(l.service||'—')}</td>
+      <td>${fmtMoney(l.budget)}</td>
+      <td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td>
+      <td class="cell-dim">${fmtDate(l.createdDate)}</td>
+      <td><button class="btn btn-ghost btn-icon" onclick="openFormModal('leads','${l.id}')" title="Edit">✎</button></td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+function openMyLeadFormModal(){
+  openFormModal('leads');
+}
+function renderMyDealsView(){
+  const st = closerStats(CURRENT_USER.entityId);
+  const projects = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  document.getElementById('view-mydeals').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(st.totalCommission)}</div><div class="stat-label">Total Commission</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(st.paidCommission)}</div><div class="stat-label">Paid Commission</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${fmtMoney(st.pendingCommission)}</div><div class="stat-label">Pending Commission</div></div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">My Deals &amp; Commission History</div></div>
+      ${projects.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Tracking ID</th><th>Client</th><th>Project Value</th><th>Commission</th><th>Payout Status</th><th>Status</th></tr></thead><tbody>
+        ${projects.map(p=>`<tr>
+          <td class="cell-strong" style="cursor:pointer;color:var(--accent-2)" onclick="openProjectDetails('${p.id}')">${p.trackingId}</td>
+          <td>${escapeHtml(p.clientName)}</td>
+          <td>${fmtMoney(p.totalPrice)}</td>
+          <td>${fmtMoney(p.closerCommission)}</td>
+          <td>${p.closerCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          <td><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('$','No deals yet','Projects tied to your closed leads will appear here once created.')}
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------
+   27. DELIVERY PARTNER ROLE — DASHBOARD, MY PROJECTS
+   --------------------------------------------------------------------- */
+function renderDPDashboard(){
+  const st = dpStats(CURRENT_USER.entityId);
+  const projects = scopedProjects();
+  const statCards = [
+    {label:'Active Projects', val:st.activeProjects, ic:'▣', bg:'bg-violet'},
+    {label:'Delivered Projects', val:st.deliveredProjects, ic:'✓', bg:'bg-green'},
+    {label:'Pending Deliveries', val:st.pendingDeliveries, ic:'⏱', bg:'bg-amber'},
+    {label:'Total Earnings', val:fmtMoney(st.totalEarnings), ic:'$', bg:'bg-green'},
+    {label:'Paid Earnings', val:fmtMoney(st.paidEarnings), ic:'✓', bg:'bg-green'},
+    {label:'Pending Earnings', val:fmtMoney(st.pendingEarnings), ic:'!', bg:'bg-amber'}
+  ];
+  const upcoming = projects.filter(p=>p.deadline && p.status!=='Completed').sort((a,b)=>new Date(a.deadline)-new Date(b.deadline)).slice(0,6);
+  document.getElementById('view-dashboard').innerHTML = `
+    <div class="stat-grid">${statCards.map(c=>`<div class="stat-card glass"><div class="ic-badge ${c.bg}">${c.ic}</div><div class="stat-val">${c.val}</div><div class="stat-label">${c.label}</div></div>`).join('')}</div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Upcoming Deadlines</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('myprojects')">View All Projects</button></div></div>
+      ${upcoming.length ? upcoming.map(p=>{
+        const days = daysBetween(todayISO(), p.deadline);
+        return `<div class="detail-row"><span>${escapeHtml(p.clientName)} <span class="cell-dim">(${p.trackingId})</span></span><span style="color:${days<=2?'var(--red)':'var(--text)'}">${fmtDate(p.deadline)}</span></div>`;
+      }).join('') : emptyState('⏱','No active deadlines','Projects assigned to you will show their deadlines here.')}
+    </div>
+  `;
+}
+function renderMyProjectsView(){
+  document.getElementById('view-myprojects').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">My Projects <span class="sm">${scopedProjects().length} total</span></div></div>
+      <div class="toolbar">
+        <div class="search-box"><span class="ic">⌕</span><input type="text" placeholder="Search my projects…" id="myProjSearchInput" oninput="FILTERS.myprojects=FILTERS.myprojects||{};FILTERS.myprojects.q=this.value;renderMyProjectsTable();"></div>
+        <select class="filter-select" id="myProjStatusFilter" onchange="FILTERS.myprojects=FILTERS.myprojects||{};FILTERS.myprojects.status=this.value;renderMyProjectsTable();">
+          <option value="">All Statuses</option>
+          ${PROJECT_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div id="myProjectsTableWrap"></div>
+    </div>
+  `;
+  renderMyProjectsTable();
+}
+function renderMyProjectsTable(){
+  const f = FILTERS.myprojects || {};
+  let rows = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  if(f.q) rows = rows.filter(p => (p.clientName+p.trackingId).toLowerCase().includes(f.q.toLowerCase()));
+  if(f.status) rows = rows.filter(p => p.status === f.status);
+  const wrap = document.getElementById('myProjectsTableWrap');
+  if(!rows.length){ wrap.innerHTML = emptyState('▣','No projects found','Projects assigned to you for delivery will appear here.'); return; }
+  wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Tracking ID</th><th>Client</th><th>Freelancer</th><th>Deadline</th><th>Status</th><th></th>
+  </tr></thead><tbody>
+    ${rows.map(p=>`<tr>
+      <td class="cell-strong" style="cursor:pointer;color:var(--accent-2)" onclick="openProjectDetails('${p.id}')">${p.trackingId}</td>
+      <td>${escapeHtml(p.clientName)}</td>
+      <td>${escapeHtml(freelancerName(p.freelancerId))}</td>
+      <td class="cell-dim">${fmtDate(p.deadline)}</td>
+      <td><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openProjectDetails('${p.id}')">Manage</button></td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+/* ---------------------------------------------------------------------
+   28. FREELANCER ROLE — DASHBOARD, MY TASKS
+   --------------------------------------------------------------------- */
+function renderFreelancerDashboard(){
+  const st = freelancerStats(CURRENT_USER.entityId);
+  const projects = scopedProjects();
+  const activeTasks = projects.filter(p=>p.status!=='Completed').length;
+  const statCards = [
+    {label:'Assigned Tasks', val:st.totalProjects, ic:'✦', bg:'bg-violet'},
+    {label:'Active Tasks', val:activeTasks, ic:'⏱', bg:'bg-amber'},
+    {label:'Completed Tasks', val:st.completedProjects, ic:'✓', bg:'bg-green'},
+    {label:'Earnings', val:fmtMoney(st.totalEarnings), ic:'$', bg:'bg-green'}
+  ];
+  document.getElementById('view-dashboard').innerHTML = `
+    <div class="stat-grid">${statCards.map(c=>`<div class="stat-card glass"><div class="ic-badge ${c.bg}">${c.ic}</div><div class="stat-val">${c.val}</div><div class="stat-label">${c.label}</div></div>`).join('')}</div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">My Tasks</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('mytasks')">View All</button></div></div>
+      ${projects.length ? projects.slice(0,6).map(p=>`<div class="detail-row"><span>${escapeHtml(p.clientName)} <span class="cell-dim">(${p.trackingId})</span></span><span><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></span></div>`).join('') : emptyState('✦','No tasks assigned yet','Work assigned to you will appear here.')}
+    </div>
+  `;
+}
+function renderMyTasksView(){
+  const rows = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  document.getElementById('view-mytasks').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">My Tasks <span class="sm">${rows.length} total</span></div></div>
+      ${rows.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Tracking ID</th><th>Client</th><th>Service</th><th>Deadline</th><th>Status</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map(p=>`<tr>
+          <td class="cell-strong">${p.trackingId}</td>
+          <td>${escapeHtml(p.clientName)}</td>
+          <td>${escapeHtml(p.service||'—')}</td>
+          <td class="cell-dim">${fmtDate(p.deadline)}</td>
+          <td><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openProjectDetails('${p.id}')">Open</button></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('✦','No tasks assigned yet','Work assigned to you will appear here.')}
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------
+   29. CLIENT ROLE — DASHBOARD, MY PROJECT
+   --------------------------------------------------------------------- */
+function clientProjectCardsHTML(projects){
+  return projects.map(p=>{
+    const fin = computeProjectFinancials(p);
+    const pct = projectProgressPercent(p.status);
+    const idx = PROJECT_STATUSES.indexOf(p.status);
+    const deliverables = p.deliverables || [];
+    return `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">${p.trackingId} <span class="sm">${escapeHtml(p.service||'')}</span></div>
+        <div class="panel-actions"><span class="badge ${badgeClassFor(fin.paymentStatus)}">${fin.paymentStatus}</span></div>
+      </div>
+      <div class="detail-row"><span>Deadline</span><span>${fmtDate(p.deadline)}</span></div>
+      <div class="detail-row"><span>Total Value</span><span>${fmtMoney(fin.total)}</span></div>
+      <div class="detail-row"><span>Advance Paid</span><span>${fmtMoney(fin.adv)}</span></div>
+      <div class="detail-row"><span>Remaining Due</span><span>${fmtMoney(fin.remaining)}</span></div>
+      <div style="margin:14px 0 4px;font-size:12px;color:var(--text-dim);">Progress — ${pct}%</div>
+      <div class="progress-track" style="margin-bottom:14px;"><div class="progress-fill" style="width:${pct}%"></div></div>
+      ${PROJECT_STATUSES.map((st,i)=>`
+        <div class="track-step">
+          <div class="track-dot ${i<idx?'done':(i===idx?'active':'')}">${i<idx?'✓':(i+1)}</div>
+          <div style="font-size:13px;font-weight:${i===idx?'700':'500'};color:${i<=idx?'var(--text)':'var(--text-faint)'}">${st}</div>
+        </div>`).join('')}
+      <div class="detail-section-title">Deliverables</div>
+      ${deliverables.length ? deliverables.map(d=>`<div class="deliv-item"><span>${escapeHtml(d.label)}</span>${d.link?`<a href="${escapeHtml(d.link)}" target="_blank" rel="noopener">Open ↗</a>`:''}</div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No deliverables uploaded yet.</p>'}
+      ${p.status==='Revision' && p.revisionNotes ? `<div class="detail-section-title">Revision Status</div><p style="font-size:13px;color:var(--text-dim);">${escapeHtml(p.revisionNotes)}</p>` : ''}
+    </div>`;
+  }).join('');
+}
+function renderClientDashboard(){
+  const projects = scopedProjects();
+  document.getElementById('view-dashboard').innerHTML = projects.length ? clientProjectCardsHTML(projects) : `<div class="panel glass">${emptyState('▣','No project linked yet','Your account is not yet linked to a project. Contact your account manager.')}</div>`;
+}
+function renderMyProjectView(){
+  const projects = scopedProjects();
+  document.getElementById('view-myproject').innerHTML = projects.length ? clientProjectCardsHTML(projects) : `<div class="panel glass">${emptyState('▣','No project linked yet','Your account is not yet linked to a project. Contact your account manager.')}</div>`;
+}
+
+/* ---------------------------------------------------------------------
+   30. ADMIN — USER MANAGEMENT
+   --------------------------------------------------------------------- */
+function renderUsersView(){
+  document.getElementById('view-users').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">Users <span class="sm">${getAll('users').length} accounts</span></div>
+        <div class="panel-actions"><button class="btn btn-primary btn-sm" onclick="openCreateUserModal()">+ Create User</button></div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span class="ic">⌕</span><input type="text" placeholder="Search users…" id="userSearchInput" oninput="FILTERS.users=FILTERS.users||{};FILTERS.users.q=this.value;renderUsersTable();"></div>
+        <select class="filter-select" id="userRoleFilter" onchange="FILTERS.users=FILTERS.users||{};FILTERS.users.role=this.value;renderUsersTable();">
+          <option value="">All Roles</option>
+          <option value="admin">Admin</option><option value="closer">Closer</option><option value="dp">Delivery Partner</option><option value="freelancer">Freelancer</option><option value="client">Client</option>
+        </select>
+      </div>
+      <div id="usersTableWrap"></div>
+    </div>
+  `;
+  renderUsersTable();
+}
+function renderUsersTable(){
+  const f = FILTERS.users || {};
+  let rows = getAll('users').slice().sort((a,b)=>a.loginId.localeCompare(b.loginId));
+  if(f.q) rows = rows.filter(u => (u.name+u.loginId).toLowerCase().includes(f.q.toLowerCase()));
+  if(f.role) rows = rows.filter(u => u.role === f.role);
+  const wrap = document.getElementById('usersTableWrap');
+  if(!rows.length){ wrap.innerHTML = emptyState('☻','No users found','Try adjusting your search or filters.'); return; }
+  wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Login ID</th><th>Name</th><th>Role</th><th>Linked Record</th><th>Status</th><th></th>
+  </tr></thead><tbody>
+    ${rows.map(u=>`<tr>
+      <td class="cell-strong">${escapeHtml(u.loginId)}</td>
+      <td>${escapeHtml(u.name)}</td>
+      <td><span class="role-pill role-${u.role}">${ROLE_LABELS[u.role]}</span></td>
+      <td>${escapeHtml(entityNameForUser(u))}</td>
+      <td><span class="status-pill status-${u.status}">${u.status==='active'?'Active':'Disabled'}</span></td>
+      <td><div class="row-actions">
+        <button class="btn btn-ghost btn-icon" onclick="openResetPasswordModal('${u.id}')" title="Reset Password">🔑</button>
+        <button class="btn btn-ghost btn-icon" onclick="toggleUserStatus('${u.id}')" title="${u.status==='active'?'Disable':'Enable'}">${u.status==='active'?'⏸':'▶'}</button>
+        ${u.role!=='admin' ? `<button class="btn btn-danger btn-icon" onclick="confirmDeleteUser('${u.id}','${escapeHtml(u.name)}')" title="Delete">🗑</button>` : ''}
+      </div></td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+function openCreateUserModal(){
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Create New User</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field">
+      <label>Role</label>
+      <select id="newUserRole" onchange="prefillNewUserDefaults()">
+        <option value="closer">Closer</option>
+        <option value="dp">Delivery Partner</option>
+        <option value="freelancer">Freelancer</option>
+        <option value="client">Client</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="form-grid2">
+      <div class="field"><label>Full Name *</label><input type="text" id="newUserName" placeholder="e.g. Rahul Sharma"></div>
+      <div class="field"><label>Username (Login ID) *</label><input type="text" id="newUserLoginId" placeholder="e.g. CL11"></div>
+      <div class="field"><label>Password *</label><input type="text" id="newUserPassword" placeholder="e.g. 0011"></div>
+      <div class="field" id="newUserWhatsappField"><label>WhatsApp Number</label><input type="tel" id="newUserWhatsapp"></div>
+    </div>
+    <div class="field-hint">A linked <span id="newUserEntityLabel">Closer</span> record will be created automatically for this login.</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCreateUser()">Create User</button>
+    </div>
+  `);
+  prefillNewUserDefaults();
+}
+function prefillNewUserDefaults(){
+  const role = document.getElementById('newUserRole').value;
+  const prefixMap = { closer:'CL', dp:'DP', freelancer:'FR', client:'CT' };
+  const baseMap = { closer:0, dp:1000, freelancer:2000, client:3000 };
+  if(role === 'admin'){
+    document.getElementById('newUserLoginId').value = '';
+    document.getElementById('newUserPassword').value = '';
+  }else{
+    const nextSeq = getAll('users').filter(u=>u.role===role).length + 1;
+    document.getElementById('newUserLoginId').value = prefixMap[role]+pad(nextSeq,2);
+    document.getElementById('newUserPassword').value = role==='closer' ? pad(nextSeq,4) : String(baseMap[role]+nextSeq);
+  }
+  const labelEl = document.getElementById('newUserEntityLabel');
+  if(labelEl) labelEl.textContent = ROLE_LABELS[role]||role;
+  const wField = document.getElementById('newUserWhatsappField');
+  if(wField) wField.style.display = role==='admin' ? 'none' : '';
+}
+async function submitCreateUser(){
+  const role = document.getElementById('newUserRole').value;
+  const name = document.getElementById('newUserName').value.trim();
+  const loginId = document.getElementById('newUserLoginId').value.trim();
+  const password = document.getElementById('newUserPassword').value.trim();
+  const whatsappEl = document.getElementById('newUserWhatsapp');
+  const whatsapp = whatsappEl ? whatsappEl.value.trim() : '';
+  if(!name || !loginId || !password){ toast('Please fill all required fields', 'error'); return; }
+  if(findUserByLoginId(loginId)){ toast('This username already exists', 'error'); return; }
+
+  let entityId = null;
+  if(role !== 'admin'){
+    const coll = ROLE_ENTITY_COLL[role];
+    const idPrefix = {closer:'closer', dp:'dp', freelancer:'fl', client:'client'}[role];
+    const rec = { id: uid(idPrefix), name, whatsapp, email:'', createdDate: todayISO() };
+    if(role === 'closer') rec.commissionRate = 10;
+    if(role === 'dp') rec.commissionRate = 15;
+    if(role === 'freelancer'){ rec.skill = SKILLS[0]; rec.rating = 5; }
+    await upsert(coll, rec);
+    entityId = rec.id;
+  }
+  const user = await createUserRecord({ role, loginId, password, name, entityId });
+  logActivity('User', 'New user created: '+user.loginId+' ('+ROLE_LABELS[role]+')');
+  closeModal();
+  toast('User created successfully', 'success');
+  renderAll();
+}
+function openResetPasswordModal(userId){
+  const u = getById('users', userId);
+  if(!u) return;
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Reset Password — ${escapeHtml(u.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>New Password</label><input type="text" id="resetUserPasswordInput" placeholder="Minimum 4 characters"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitResetUserPassword('${userId}')">Reset Password</button>
+    </div>`);
+}
+async function submitResetUserPassword(userId){
+  const pass = document.getElementById('resetUserPasswordInput').value.trim();
+  if(!pass || pass.length < 4){ toast('Password must be at least 4 characters', 'error'); return; }
+  const u = getById('users', userId);
+  if(!u) return;
+  u.passwordHash = await sha256(pass);
+  await upsert('users', u);
+  logActivity('User', 'Password reset for '+u.loginId+' by admin');
+  closeModal();
+  toast('Password reset successfully', 'success');
+}
+async function toggleUserStatus(userId){
+  const u = getById('users', userId);
+  if(!u) return;
+  u.status = u.status === 'active' ? 'disabled' : 'active';
+  await upsert('users', u);
+  logActivity('User', u.loginId+' was '+(u.status==='active'?'enabled':'disabled'));
+  toast('User '+(u.status==='active'?'enabled':'disabled'), 'success');
+  renderUsersTable();
+}
+function confirmDeleteUser(userId, name){
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Delete User?</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13.5px;color:var(--text-dim);line-height:1.5;">Are you sure you want to delete the login for <strong style="color:var(--text)">${escapeHtml(name)}</strong>? Their underlying business record is kept, but they will no longer be able to log in.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doDeleteUser('${userId}','${escapeHtml(name)}')">Delete</button>
+    </div>`);
+}
+async function doDeleteUser(userId, name){
+  await removeById('users', userId);
+  logActivity('User', 'User account deleted: '+name);
+  closeModal();
+  toast('User deleted', 'success');
+  renderAll();
+}
+
+/* ---------------------------------------------------------------------
    25. RENDER MAP + GLOBAL REFRESH
    --------------------------------------------------------------------- */
-let CURRENT_VIEW = 'dashboard';
 const RENDER_MAP = {
   dashboard: renderDashboard,
   kanban: renderKanbanView,
@@ -2099,9 +3291,16 @@ const RENDER_MAP = {
   analytics: renderAnalyticsView,
   activity: renderActivityView,
   backup: renderBackupView,
-  settings: renderSettingsView
+  settings: renderSettingsView,
+  users: renderUsersView,
+  myleads: renderMyLeadsView,
+  mydeals: renderMyDealsView,
+  myprojects: renderMyProjectsView,
+  mytasks: renderMyTasksView,
+  myproject: renderMyProjectView
 };
 function renderAll(){
+  if(!CURRENT_USER) return;
   renderNavBadges();
   checkDeadlineReminders();
   renderNotifDot();
@@ -2115,6 +3314,7 @@ function renderAll(){
    --------------------------------------------------------------------- */
 function wireStaticEvents(){
   document.getElementById('loginBtn').addEventListener('click', handleLogin);
+  document.getElementById('loginUsername').addEventListener('keydown', e => { if(e.key === 'Enter') handleLogin(); });
   document.getElementById('loginPassword').addEventListener('keydown', e => { if(e.key === 'Enter') handleLogin(); });
   document.getElementById('forgotPassLink').addEventListener('click', () => showScreen('forgotScreen'));
   document.getElementById('backToLoginLink').addEventListener('click', () => showScreen('loginScreen'));
@@ -2135,27 +3335,33 @@ function wireStaticEvents(){
     const panel = document.getElementById('notifPanel');
     if(panel.classList.contains('show') && !panel.contains(e.target) && e.target.id !== 'notifBtn') panel.classList.remove('show');
   });
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => { CURRENT_VIEW = item.dataset.view; navigateTo(item.dataset.view); });
-  });
 }
 
 async function bootstrap(){
-  loadDB();
-  const firstRunKey = await ensureDefaultAuth();
+  await loadDB();
+  const firstRunKey = await ensureBootstrap();
   wireStaticEvents();
 
   setTimeout(async () => {
-    if(isLoggedIn()){
+    const sessionUser = isLoggedIn() ? resolveCurrentUser() : null;
+    if(sessionUser){
+      CURRENT_USER = sessionUser;
       showApp();
     }else{
+      if(isLoggedIn()) clearLoggedIn();
       showScreen('loginScreen');
     }
     if(firstRunKey){
       renderModal(`
         <div class="modal-head"><div class="modal-title">Welcome to ELITHNIC</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-        <p style="font-size:13.5px;color:var(--text-dim);line-height:1.5;">Your workspace is ready. Save this recovery key — you'll need it if you ever forget your admin password. It will not be shown again.</p>
+        <p style="font-size:13.5px;color:var(--text-dim);line-height:1.5;">Your workspace is ready with demo data preloaded. Save this recovery key — you'll need it if you ever forget the admin password. It will not be shown again.</p>
         <div class="recovery-box">${firstRunKey}</div>
+        <div class="detail-section-title">Demo Logins</div>
+        <div class="detail-row"><span>Admin</span><span>admin / elithnic123</span></div>
+        <div class="detail-row"><span>Closers</span><span>CL01–CL10 / 0001–0010</span></div>
+        <div class="detail-row"><span>Delivery Partners</span><span>DP01–DP10 / 1001–1010</span></div>
+        <div class="detail-row"><span>Freelancers</span><span>FR01–FR10 / 2001–2010</span></div>
+        <div class="detail-row"><span>Clients</span><span>CT01–CT10 / 3001–3010</span></div>
         <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">I've saved my recovery key</button></div>
       `);
     }
