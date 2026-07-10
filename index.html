@@ -576,6 +576,14 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-mytasks"></section>
       <!-- ============ MY PROJECT (client) ============ -->
       <section class="view-section" id="view-myproject"></section>
+      <!-- ============ MARKETPLACE — PRODUCTS (admin CRUD) ============ -->
+      <section class="view-section" id="view-products"></section>
+      <!-- ============ MARKETPLACE — SALES (admin) ============ -->
+      <section class="view-section" id="view-productsales"></section>
+      <!-- ============ MY PRODUCTS (closer — limited view) ============ -->
+      <section class="view-section" id="view-myproducts"></section>
+      <!-- ============ MY DOWNLOADS (client — demo + zip after payment) ============ -->
+      <section class="view-section" id="view-mydownloads"></section>
     </main>
   </div>
 </div>
@@ -623,7 +631,7 @@ try{
 // Every top-level array collection in the app, 1:1 with a Firestore collection.
 // Document ID === the app's own record.id (never Firestore auto-IDs) so writes
 // are idempotent by nature — re-sending the same record can never create a duplicate.
-const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications'];
+const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications','products','productSales'];
 const FS_SYSTEM_DOC = FIREBASE_AVAILABLE ? fsdb.collection('system').doc('config') : null; // holds { auth, counters, meta }
 let FS_UNSUBSCRIBERS = [];
 
@@ -699,6 +707,7 @@ function defaultDB(){
     users: [],
     leads: [], closers: [], deliveryPartners: [], freelancers: [], clients: [], projects: [],
     activities: [], notifications: [],
+    products: [], productSales: [],
     counters: { lead:0, closer:0, dp:0, freelancer:0, client:0, project:1000, user:0 },
     meta: { createdAt: new Date().toISOString() }
   };
@@ -1094,6 +1103,10 @@ const NAV_CONFIG = {
       {view:'payments', ic:'$', label:'Payments'},
       {view:'analytics', ic:'▱', label:'Analytics'}
     ]},
+    {group:'Marketplace', items:[
+      {view:'products', ic:'⊞', label:'Products', badge:'navProductsBadge'},
+      {view:'productsales', ic:'⊙', label:'Product Sales'}
+    ]},
     {group:'System', items:[
       {view:'users', ic:'☻', label:'Users'},
       {view:'activity', ic:'≡', label:'Activity Log'},
@@ -1107,21 +1120,27 @@ const NAV_CONFIG = {
       {view:'myleads', ic:'◎', label:'My Leads'},
       {view:'mydeals', ic:'$', label:'My Deals & Commission'}
     ]},
+    {group:'Marketplace', items:[
+      {view:'myproducts', ic:'⊞', label:'My Products'}
+    ]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   dp:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
     {group:'Delivery', items:[{view:'myprojects', ic:'▣', label:'My Projects'}]},
+    {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   freelancer:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
     {group:'Work', items:[{view:'mytasks', ic:'✦', label:'My Tasks'}]},
+    {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   client:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
     {group:'Project', items:[{view:'myproject', ic:'▣', label:'My Project'}]},
+    {group:'Marketplace', items:[{view:'mydownloads', ic:'⊞', label:'My Products'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ]
 };
@@ -1157,7 +1176,11 @@ const VIEW_META = {
   mydeals:{title:'My Deals & Commission', sub:'Your closed deals and commission history'},
   myprojects:{title:'My Projects', sub:'Projects assigned to you for delivery'},
   mytasks:{title:'My Tasks', sub:'Work assigned to you'},
-  myproject:{title:'My Project', sub:'Live status of your project with ELITHNIC'}
+  myproject:{title:'My Project', sub:'Live status of your project with ELITHNIC'},
+  products:{title:'Products', sub:'Manage your source code marketplace listings'},
+  productsales:{title:'Product Sales', sub:'All product sales, closers and commissions'},
+  myproducts:{title:'My Products', sub:'Source code products assigned to you to sell'},
+  mydownloads:{title:'My Products', sub:'Your purchased products and downloads'}
 };
 
 function navigateTo(view){
@@ -1613,8 +1636,10 @@ function activityItemHTML(a){
 function renderNavBadges(){
   const leadsBadge = document.getElementById('navLeadsBadge');
   const projectsBadge = document.getElementById('navProjectsBadge');
+  const productsBadge = document.getElementById('navProductsBadge');
   if(leadsBadge) leadsBadge.textContent = getAll('leads').filter(l=>!['Closed','Lost'].includes(l.status)).length;
   if(projectsBadge) projectsBadge.textContent = getAll('projects').filter(p=>p.status!=='Completed').length;
+  if(productsBadge) productsBadge.textContent = getAll('products').filter(p=>p.status==='Active').length;
 }
 
 /* ---------------------------------------------------------------------
@@ -3111,9 +3136,469 @@ function renderMyProjectView(){
   document.getElementById('view-myproject').innerHTML = projects.length ? clientProjectCardsHTML(projects) : `<div class="panel glass">${emptyState('▣','No project linked yet','Your account is not yet linked to a project. Contact your account manager.')}</div>`;
 }
 
-/* ---------------------------------------------------------------------
-   30. ADMIN — USER MANAGEMENT
-   --------------------------------------------------------------------- */
+/* =====================================================================
+   31. SOURCE CODE MARKETPLACE
+   ===================================================================== */
+const PRODUCT_CATEGORIES = ['Web App','Mobile App','SaaS Tool','CRM / ERP','E-commerce','API / Backend','Chrome Extension','WordPress Plugin','Landing Page','Other'];
+const PRODUCT_STATUSES = ['Draft','Active','Paused'];
+const CLOSER_COMMISSION_RATE = 0.20; // 20% fixed for all product sales
+
+/* ---------- Helpers ------------------------------------------------ */
+function getProductClosers(productId){
+  return getAll('productSales')
+    .filter(s => s.productId === productId)
+    .map(s => s.closerId)
+    .filter((v,i,a) => a.indexOf(v) === i);  // unique
+}
+function productSalesForCloser(closerId){
+  return getAll('productSales').filter(s => s.closerId === closerId);
+}
+function productSalesForClient(clientId){
+  return getAll('productSales').filter(s => s.clientId === clientId);
+}
+function productSalesForProduct(productId){
+  return getAll('productSales').filter(s => s.productId === productId);
+}
+function productTotalCommission(closerId){
+  return productSalesForCloser(closerId).reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
+}
+function productPaidCommission(closerId){
+  return productSalesForCloser(closerId).filter(x=>x.commissionPaid).reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
+}
+function videoEmbedHTML(url, label){
+  if(!url) return `<div class="empty-state" style="padding:20px 0;"><div class="ic">▶</div><div class="s">${label} not added yet</div></div>`;
+  // Support YouTube, Vimeo, direct video links
+  let src = '';
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if(ytMatch) src = `https://www.youtube.com/embed/${ytMatch[1]}`;
+  else if(vimeoMatch) src = `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  if(src) return `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;margin:8px 0;"><iframe src="${escapeHtml(src)}" style="position:absolute;inset:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`;
+  // Fallback: direct video link button
+  return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="margin:6px 0;">▶ Watch ${label}</a>`;
+}
+
+/* ---------- 31a. ADMIN — PRODUCT MANAGEMENT ----------------------- */
+function renderProductsView(){
+  const products = getAll('products').slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  document.getElementById('view-products').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">Products <span class="sm">${products.length} listed</span></div>
+        <div class="panel-actions">
+          <button class="btn btn-primary btn-sm" onclick="openProductModal()">+ Add Product</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span class="ic">⌕</span><input type="text" placeholder="Search products…" id="productSearchInput" oninput="renderProductsTable()"></div>
+        <select class="filter-select" id="productCategoryFilter" onchange="renderProductsTable()">
+          <option value="">All Categories</option>
+          ${PRODUCT_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+        <select class="filter-select" id="productStatusFilter" onchange="renderProductsTable()">
+          <option value="">All Statuses</option>
+          ${PRODUCT_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div id="productsTableWrap"></div>
+    </div>`;
+  renderProductsTable();
+}
+function renderProductsTable(){
+  const q = (document.getElementById('productSearchInput')?.value||'').toLowerCase();
+  const cat = document.getElementById('productCategoryFilter')?.value||'';
+  const st = document.getElementById('productStatusFilter')?.value||'';
+  let rows = getAll('products').slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  if(q) rows = rows.filter(p=>(p.name+(p.description||'')).toLowerCase().includes(q));
+  if(cat) rows = rows.filter(p=>p.category===cat);
+  if(st) rows = rows.filter(p=>p.status===st);
+  const wrap = document.getElementById('productsTableWrap');
+  if(!wrap) return;
+  if(!rows.length){ wrap.innerHTML = emptyState('⊞','No products found','Add your first source code product to get started.'); return; }
+  wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>App Name</th><th>Category</th><th>Price</th><th>Assigned Closers</th><th>Sales</th><th>Revenue</th><th>Status</th><th></th>
+  </tr></thead><tbody>
+    ${rows.map(p=>{
+      const sales = productSalesForProduct(p.id);
+      const revenue = sales.reduce((s,x)=>s+(Number(x.salePrice)||0),0);
+      const assignedClosers = getProductClosers(p.id).length;
+      return `<tr>
+        <td class="cell-strong" style="cursor:pointer" onclick="openProductDetail('${p.id}')">${escapeHtml(p.name)}</td>
+        <td class="cell-dim">${escapeHtml(p.category||'—')}</td>
+        <td>${fmtMoney(p.price)}</td>
+        <td>${assignedClosers}</td>
+        <td>${sales.length}</td>
+        <td style="color:var(--green)">${fmtMoney(revenue)}</td>
+        <td><span class="badge ${p.status==='Active'?'badge-closed':p.status==='Draft'?'badge-new':'badge-lost'}">${p.status}</span></td>
+        <td><div class="row-actions">
+          <button class="btn btn-ghost btn-icon" onclick="openProductModal('${p.id}')" title="Edit">✎</button>
+          <button class="btn btn-ghost btn-icon" onclick="openProductDetail('${p.id}')" title="Detail">⊕</button>
+          <button class="btn btn-danger btn-icon" onclick="deleteProduct('${p.id}','${escapeHtml(p.name)}')" title="Delete">🗑</button>
+        </div></td>
+      </tr>`;
+    }).join('')}
+  </tbody></table></div>`;
+}
+
+function openProductModal(productId){
+  const p = productId ? getById('products', productId) : null;
+  const closers = getAll('closers');
+  const assignedCloserIds = p ? (p.assignedCloserIds||[]) : [];
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">${p?'Edit Product':'Add New Product'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="form-grid2">
+      <div class="field" style="grid-column:1/-1"><label>App / Product Name *</label><input type="text" id="prd_name" value="${escapeHtml(p?.name||'')}"></div>
+      <div class="field"><label>Category</label><select id="prd_category">
+        ${PRODUCT_CATEGORIES.map(c=>`<option value="${c}" ${c===(p?.category||'')?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Status</label><select id="prd_status">
+        ${PRODUCT_STATUSES.map(s=>`<option value="${s}" ${s===(p?.status||'Draft')?' selected':''}>${s}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Price (₹) *</label><input type="number" id="prd_price" value="${p?.price||''}"></div>
+      <div class="field"><label>App Description</label><input type="text" id="prd_description" placeholder="What this app does, in one line" value="${escapeHtml(p?.description||'')}"></div>
+      <div class="field" style="grid-column:1/-1"><label>Purpose / Demo Video URL <span style="font-size:11px;color:var(--text-faint)">(YouTube / Vimeo / direct) — sent to Closer</span></label><input type="url" id="prd_purposeVideo" value="${escapeHtml(p?.purposeVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
+      <div class="field" style="grid-column:1/-1"><label>Setup / How-to-Run Video URL <span style="font-size:11px;color:var(--text-faint)">(released to client on payment)</span></label><input type="url" id="prd_setupVideo" value="${escapeHtml(p?.setupVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
+      <div class="field" style="grid-column:1/-1"><label>ZIP File URL <span style="font-size:11px;color:var(--text-faint)">(Google Drive / Dropbox direct download — released on payment)</span></label><input type="url" id="prd_zipUrl" value="${escapeHtml(p?.zipUrl||'')}" placeholder="https://drive.google.com/..."></div>
+      <div class="field"><label>ZIP Password</label><input type="text" id="prd_zipPass" value="${escapeHtml(p?.zipPassword||'')}" placeholder="Leave blank if no password"></div>
+      <div class="field"><label>Tech Stack / Tags</label><input type="text" id="prd_tags" value="${escapeHtml(p?.tags||'')}" placeholder="React, Node.js, Firebase…"></div>
+    </div>
+    <div class="detail-section-title">Assign Closers</div>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Tick the closers who will sell this product. They will see the purpose video and product info — not the ZIP or password.</p>
+    <div id="closerCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:160px;overflow-y:auto;">
+      ${closers.length ? closers.map(c=>`
+        <div class="check-field"><input type="checkbox" id="pc_${c.id}" ${assignedCloserIds.includes(c.id)?'checked':''}>
+        <label for="pc_${c.id}">${escapeHtml(c.name)}</label></div>
+      `).join('') : '<p style="font-size:12px;color:var(--text-faint);">No closers exist yet — add closers first.</p>'}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitProductForm('${productId||''}')">
+        ${p?'Save Changes':'Create Product'}
+      </button>
+    </div>
+  `);
+}
+async function submitProductForm(productId){
+  const name = document.getElementById('prd_name').value.trim();
+  const price = parseFloat(document.getElementById('prd_price').value)||0;
+  if(!name || price <= 0){ toast('Product name and price are required', 'error'); return; }
+  const closers = getAll('closers');
+  const assignedCloserIds = closers.filter(c => document.getElementById('pc_'+c.id)?.checked).map(c=>c.id);
+  const isNew = !productId;
+  const existing = productId ? getById('products', productId) : null;
+  const record = Object.assign(existing||{}, {
+    id: isNew ? uid('prod') : productId,
+    name,
+    category: document.getElementById('prd_category').value,
+    status: document.getElementById('prd_status').value,
+    price,
+    description: document.getElementById('prd_description').value.trim(),
+    purposeVideoUrl: document.getElementById('prd_purposeVideo').value.trim(),
+    setupVideoUrl: document.getElementById('prd_setupVideo').value.trim(),
+    zipUrl: document.getElementById('prd_zipUrl').value.trim(),
+    zipPassword: document.getElementById('prd_zipPass').value.trim(),
+    tags: document.getElementById('prd_tags').value.trim(),
+    assignedCloserIds,
+    createdDate: existing?.createdDate || todayISO()
+  });
+  const btn = document.querySelector('.modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try{
+    await upsert('products', record);
+    logActivity('Marketplace', (isNew?'Product listed: ':'Product updated: ')+name);
+    closeModal();
+    toast('Product '+(isNew?'created':'updated')+' successfully', 'success');
+    renderAll();
+  }catch(err){
+    toast('Save failed — check connection', 'error');
+    if(btn){ btn.disabled=false; btn.textContent='Save'; }
+  }
+}
+async function deleteProduct(productId, name){
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Delete Product?</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13.5px;color:var(--text-dim);line-height:1.5;">This will permanently delete <strong style="color:var(--text)">${escapeHtml(name)}</strong> and all its sales records. This cannot be undone.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doDeleteProduct('${productId}','${escapeHtml(name)}')">Delete</button>
+    </div>`);
+}
+async function doDeleteProduct(productId, name){
+  await removeById('products', productId);
+  const sales = getAll('productSales').filter(s=>s.productId===productId);
+  for(const s of sales) await removeById('productSales', s.id);
+  logActivity('Marketplace', 'Product deleted: '+name);
+  closeModal();
+  toast('Product deleted', 'success');
+  renderAll();
+}
+function openProductDetail(productId){
+  const p = getById('products', productId);
+  if(!p) return;
+  const sales = productSalesForProduct(productId);
+  const totalRevenue = sales.reduce((s,x)=>s+(Number(x.salePrice)||0),0);
+  const totalCommission = sales.reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
+  const assignedClosers = (p.assignedCloserIds||[]).map(id=>getById('closers',id)).filter(Boolean);
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">${escapeHtml(p.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="detail-row"><span>Category</span><span>${escapeHtml(p.category||'—')}</span></div>
+    <div class="detail-row"><span>Price</span><span>${fmtMoney(p.price)}</span></div>
+    <div class="detail-row"><span>Status</span><span><span class="badge ${p.status==='Active'?'badge-closed':p.status==='Draft'?'badge-new':'badge-lost'}">${p.status}</span></span></div>
+    <div class="detail-row"><span>Tech Stack</span><span>${escapeHtml(p.tags||'—')}</span></div>
+    <div class="detail-row"><span>Total Sales</span><span>${sales.length}</span></div>
+    <div class="detail-row"><span>Total Revenue</span><span style="color:var(--green)">${fmtMoney(totalRevenue)}</span></div>
+    <div class="detail-row"><span>Total Commission Paid Out</span><span>${fmtMoney(totalCommission)}</span></div>
+    <div class="detail-section-title">Purpose Demo Video</div>
+    ${videoEmbedHTML(p.purposeVideoUrl, 'Purpose Demo Video')}
+    <div class="detail-section-title">Setup / How-to-Run Video</div>
+    ${videoEmbedHTML(p.setupVideoUrl, 'Setup Video')}
+    <div class="detail-section-title">ZIP File &amp; Password (Admin Only)</div>
+    <div class="detail-row"><span>ZIP URL</span><span>${p.zipUrl?`<a href="${escapeHtml(p.zipUrl)}" target="_blank" rel="noopener" style="color:var(--accent-2)">Open Link ↗</a>`:'—'}</span></div>
+    <div class="detail-row"><span>ZIP Password</span><span>${p.zipPassword ? `<code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:6px;">${escapeHtml(p.zipPassword)}</code>` : '<span class="cell-dim">No password</span>'}</span></div>
+    <div class="detail-section-title">Assigned Closers (${assignedClosers.length})</div>
+    ${assignedClosers.length ? assignedClosers.map(c=>`<div class="detail-row"><span>${escapeHtml(c.name)}</span><span class="role-pill role-closer">Closer</span></div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No closers assigned yet.</p>'}
+    <div class="detail-section-title">Sales History</div>
+    ${sales.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Closer</th><th>Sale Price</th><th>Commission</th><th>Commission Paid</th><th>ZIP Released</th><th>Date</th><th></th></tr></thead><tbody>
+      ${sales.map(s=>`<tr>
+        <td>${escapeHtml(getById('clients',s.clientId)?.name||s.clientName||'—')}</td>
+        <td>${escapeHtml(getById('closers',s.closerId)?.name||'—')}</td>
+        <td>${fmtMoney(s.salePrice)}</td>
+        <td>${fmtMoney(s.closerCommission)}</td>
+        <td>${s.commissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+        <td>${s.zipReleased?'<span class="status-pill status-active">Released</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+        <td class="cell-dim">${fmtDate(s.createdDate)}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="toggleProductCommission('${s.id}')">${s.commissionPaid?'Unpay':'Mark Paid'}</button>
+          ${!s.zipReleased?`<button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="releaseZip('${s.id}')">Release ZIP</button>`:''}
+        </td>
+      </tr>`).join('')}
+    </tbody></table></div>` : emptyState('$','No sales yet','Record a sale below.')}
+    <div class="detail-section-title">Record New Sale</div>
+    <div class="form-grid2" style="margin-top:8px;">
+      <div class="field"><label>Client Name *</label><input type="text" id="psale_client" placeholder="Client / buyer name"></div>
+      <div class="field"><label>Closer</label><select id="psale_closer">
+        <option value="">Select Closer</option>
+        ${(p.assignedCloserIds||[]).map(id=>{const c=getById('closers',id);return c?`<option value="${id}">${escapeHtml(c.name)}</option>`:''}).join('')}
+        ${getAll('closers').filter(c=>!(p.assignedCloserIds||[]).includes(c.id)).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Sale Price (₹)</label><input type="number" id="psale_price" value="${p.price}" placeholder="${p.price}"></div>
+      <div class="field"><label>Client Login Account</label><select id="psale_clientId">
+        <option value="">Not linked to an account</option>
+        ${getAll('clients').map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="recordProductSale('${productId}')">Record Sale (20% commission auto-calculated)</button>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();openProductModal('${p.id}')">Edit Product</button></div>
+  `);
+}
+async function recordProductSale(productId){
+  const p = getById('products', productId);
+  if(!p) return;
+  const clientName = document.getElementById('psale_client').value.trim();
+  const closerId = document.getElementById('psale_closer').value;
+  const salePrice = parseFloat(document.getElementById('psale_price').value)||p.price||0;
+  const clientId = document.getElementById('psale_clientId').value;
+  if(!clientName){ toast('Please enter a client name', 'error'); return; }
+  const closerCommission = Math.round(salePrice * CLOSER_COMMISSION_RATE);
+  const sale = {
+    id: uid('psale'), productId, productName: p.name,
+    clientName, clientId: clientId||null, closerId: closerId||null,
+    salePrice, closerCommission, commissionPaid: false, zipReleased: false,
+    createdDate: todayISO()
+  };
+  await upsert('productSales', sale);
+  logActivity('Marketplace', 'Product sale recorded: '+p.name+' → '+clientName+' (₹'+salePrice+', closer commission: ₹'+closerCommission+')');
+  if(closerId){ const c=getById('closers',closerId); if(c) pushNotification('New product sale: '+p.name+' — your commission: '+fmtMoney(closerCommission), 'product'); }
+  toast('Sale recorded. Closer commission ₹'+closerCommission.toLocaleString('en-IN')+' (20%) auto-calculated.', 'success');
+  openProductDetail(productId);
+  renderAll();
+}
+async function toggleProductCommission(saleId){
+  const s = getById('productSales', saleId);
+  if(!s) return;
+  s.commissionPaid = !s.commissionPaid;
+  await upsert('productSales', s);
+  const p = getById('products', s.productId);
+  logActivity('Marketplace', 'Commission for '+( p?.name||'product')+' sale '+(s.commissionPaid?'marked paid':'marked unpaid'));
+  toast('Commission status updated', 'success');
+  openProductDetail(s.productId);
+  renderAll();
+}
+async function releaseZip(saleId){
+  const s = getById('productSales', saleId);
+  if(!s) return;
+  const p = getById('products', s.productId);
+  if(!p?.zipUrl){ toast('No ZIP file URL set on this product yet', 'error'); return; }
+  s.zipReleased = true;
+  await upsert('productSales', s);
+  logActivity('Marketplace', 'ZIP released to '+s.clientName+' for '+p.name);
+  if(s.clientId) pushNotification('Your download for '+p.name+' is now ready!', 'product');
+  toast('ZIP released to client', 'success');
+  openProductDetail(s.productId);
+  renderAll();
+}
+
+/* ---------- 31b. ADMIN — PRODUCT SALES VIEW ---------------------- */
+function renderProductSalesView(){
+  const sales = getAll('productSales').slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  const totalRevenue = sales.reduce((s,x)=>s+(Number(x.salePrice)||0),0);
+  const totalCommission = sales.reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
+  const paidCommission = sales.filter(x=>x.commissionPaid).reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
+  document.getElementById('view-productsales').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(totalRevenue)}</div><div class="stat-label">Total Product Revenue</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">⊙</div><div class="stat-val">${fmtMoney(totalCommission)}</div><div class="stat-label">Total Closer Commission</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(paidCommission)}</div><div class="stat-label">Commission Paid</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-red">!</div><div class="stat-val">${fmtMoney(totalCommission-paidCommission)}</div><div class="stat-label">Commission Pending</div></div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">All Product Sales</div></div>
+      ${sales.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Product</th><th>Client</th><th>Closer</th><th>Sale Price</th><th>Commission (20%)</th><th>Commission Status</th><th>ZIP Released</th><th>Date</th><th></th>
+      </tr></thead><tbody>
+        ${sales.map(s=>`<tr>
+          <td class="cell-strong">${escapeHtml(s.productName||getById('products',s.productId)?.name||'—')}</td>
+          <td>${escapeHtml(s.clientName||'—')}</td>
+          <td>${escapeHtml(getById('closers',s.closerId)?.name||'—')}</td>
+          <td>${fmtMoney(s.salePrice)}</td>
+          <td>${fmtMoney(s.closerCommission)}</td>
+          <td>${s.commissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          <td>${s.zipReleased?'<span class="status-pill status-active">Released</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          <td class="cell-dim">${fmtDate(s.createdDate)}</td>
+          <td><div class="row-actions">
+            <button class="btn btn-ghost btn-sm" onclick="toggleProductCommission('${s.id}')">${s.commissionPaid?'Unpay':'Pay'}</button>
+            ${!s.zipReleased?`<button class="btn btn-ghost btn-sm" onclick="releaseZip('${s.id}')">Release ZIP</button>`:''}
+          </div></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('⊙','No product sales yet','Record a sale from the Products page.')}
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Commission by Closer</div></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Closer</th><th>Product Sales</th><th>Total Commission</th><th>Paid</th><th>Pending</th>
+      </tr></thead><tbody>
+        ${getAll('closers').map(c=>{
+          const earned = productTotalCommission(c.id);
+          const paid = productPaidCommission(c.id);
+          const ps = productSalesForCloser(c.id);
+          if(!ps.length) return '';
+          return `<tr>
+            <td class="cell-strong">${escapeHtml(c.name)}</td>
+            <td>${ps.length}</td>
+            <td>${fmtMoney(earned)}</td>
+            <td style="color:var(--green)">${fmtMoney(paid)}</td>
+            <td style="color:${earned-paid>0?'var(--amber)':'var(--text-dim)'}">${fmtMoney(earned-paid)}</td>
+          </tr>`;
+        }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">No closer commission data yet</td></tr>'}
+      </tbody></table></div>
+    </div>
+  `;
+}
+
+/* ---------- 31c. CLOSER — MY PRODUCTS (limited view) ------------- */
+function renderMyProductsView(){
+  const closerEntity = entityForUser(CURRENT_USER);
+  const myProductIds = getAll('products')
+    .filter(p => p.status==='Active' && (p.assignedCloserIds||[]).includes(CURRENT_USER.entityId))
+    .map(p=>p.id);
+  const allActive = getAll('products').filter(p=>p.status==='Active');
+  const myProducts = myProductIds.map(id=>getById('products',id)).filter(Boolean);
+  const mySales = productSalesForCloser(CURRENT_USER.entityId);
+  const totalEarned = productTotalCommission(CURRENT_USER.entityId);
+  const totalPaid = productPaidCommission(CURRENT_USER.entityId);
+  document.getElementById('view-myproducts').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card glass"><div class="ic-badge bg-violet">⊞</div><div class="stat-val">${myProducts.length}</div><div class="stat-label">Products Assigned</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(totalEarned)}</div><div class="stat-label">Total Commission Earned</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(totalPaid)}</div><div class="stat-label">Commission Paid</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${fmtMoney(totalEarned-totalPaid)}</div><div class="stat-label">Commission Pending</div></div>
+    </div>
+    ${myProducts.length ? myProducts.map(p=>`
+      <div class="panel glass">
+        <div class="panel-head">
+          <div><div class="panel-title">${escapeHtml(p.name)}</div><div style="font-size:12px;color:var(--text-faint);margin-top:2px;">${escapeHtml(p.category||'')} ${p.tags?'· '+escapeHtml(p.tags):''}</div></div>
+          <div class="panel-actions"><span class="stat-val" style="font-size:18px;">${fmtMoney(p.price)}</span></div>
+        </div>
+        <div class="detail-row"><span>Your Commission per Sale</span><span style="color:var(--green);font-weight:700;">${fmtMoney(Math.round(p.price*0.20))} (20%)</span></div>
+        <div class="detail-row"><span>Description</span><span>${escapeHtml(p.description||'—')}</span></div>
+        <div class="detail-section-title">Purpose / Demo Video</div>
+        ${videoEmbedHTML(p.purposeVideoUrl, 'Purpose Demo Video')}
+        <div class="detail-section-title">My Sales for this Product</div>
+        ${productSalesForCloser(CURRENT_USER.entityId).filter(s=>s.productId===p.id).length ? (() => {
+          const ps = productSalesForCloser(CURRENT_USER.entityId).filter(s=>s.productId===p.id);
+          return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Sale Price</th><th>Commission</th><th>Status</th><th>Date</th></tr></thead><tbody>
+            ${ps.map(s=>`<tr>
+              <td>${escapeHtml(s.clientName)}</td>
+              <td>${fmtMoney(s.salePrice)}</td>
+              <td>${fmtMoney(s.closerCommission)}</td>
+              <td>${s.commissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+              <td class="cell-dim">${fmtDate(s.createdDate)}</td>
+            </tr>`).join('')}
+          </tbody></table></div>`;
+        })() : '<p style="font-size:12.5px;color:var(--text-faint);">No sales recorded yet for this product. Contact admin to log a sale when you close a client.</p>'}
+        <div class="locked-note">🔒 ZIP file and source code are admin-only and visible only after payment confirmation. You will be notified when a client pays.</div>
+      </div>`).join('') : emptyState('⊞','No products assigned yet','Admin will assign products to you. Check back soon!')}
+    ${mySales.length ? `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Commission History</div></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Client</th><th>Sale Price</th><th>Commission</th><th>Status</th><th>Date</th></tr></thead><tbody>
+        ${mySales.sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate)).map(s=>`<tr>
+          <td class="cell-strong">${escapeHtml(s.productName||'—')}</td>
+          <td>${escapeHtml(s.clientName)}</td>
+          <td>${fmtMoney(s.salePrice)}</td>
+          <td>${fmtMoney(s.closerCommission)}</td>
+          <td>${s.commissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          <td class="cell-dim">${fmtDate(s.createdDate)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+    </div>` : ''}
+  `;
+}
+
+/* ---------- 31d. CLIENT — MY DOWNLOADS (demo + zip after payment) - */
+function renderMyDownloadsView(){
+  const mySales = productSalesForClient(CURRENT_USER.entityId);
+  document.getElementById('view-mydownloads').innerHTML = mySales.length ? mySales.map(s=>{
+    const p = getById('products', s.productId);
+    if(!p) return '';
+    return `
+      <div class="panel glass" style="margin-bottom:18px;">
+        <div class="panel-head">
+          <div><div class="panel-title">${escapeHtml(p.name)}</div><div style="font-size:12px;color:var(--text-faint);">${escapeHtml(p.category||'')} ${p.tags?'· '+escapeHtml(p.tags):''}</div></div>
+          <div class="panel-actions"><span class="badge ${s.zipReleased?'badge-closed':'badge-pending'}">${s.zipReleased?'Payment Confirmed':'Awaiting Payment'}</span></div>
+        </div>
+        <div class="detail-row"><span>Price Paid</span><span>${fmtMoney(s.salePrice)}</span></div>
+        <div class="detail-row"><span>Purchase Date</span><span>${fmtDate(s.createdDate)}</span></div>
+        <div class="detail-section-title">What is this app?</div>
+        ${videoEmbedHTML(p.purposeVideoUrl, 'Purpose Demo')}
+        ${s.zipReleased ? `
+          <div class="detail-section-title">How to Run / Setup</div>
+          ${videoEmbedHTML(p.setupVideoUrl, 'Setup Guide')}
+          <div class="detail-section-title">Your Download</div>
+          <div class="stat-card glass" style="margin:8px 0;border:1px solid rgba(34,197,94,0.3);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div style="font-weight:700;font-size:14px;">Source Code ZIP</div>
+                <div style="font-size:12px;color:var(--text-dim);margin-top:3px;">${p.zipPassword?'Password-protected — see password below':'No password required'}</div>
+              </div>
+              <a href="${escapeHtml(p.zipUrl||'#')}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">⬇ Download ZIP</a>
+            </div>
+            ${p.zipPassword?`<div style="margin-top:12px;padding:10px 12px;background:rgba(124,58,237,0.1);border-radius:10px;font-size:13px;">
+              <span style="color:var(--text-faint);">ZIP Password:</span>
+              <code style="margin-left:8px;font-size:14px;font-weight:700;color:#e9d8ff;letter-spacing:1px;">${escapeHtml(p.zipPassword)}</code>
+            </div>`:''}
+          </div>` : `
+          <div class="locked-note">🔒 Your download will be available here after your payment is confirmed by our team. Please contact your account manager if you have already paid.</div>
+        `}
+      </div>`;
+  }).join('') : emptyState('⊞','No products purchased yet','When you purchase a source code product, your download and demo video will appear here.');
+}
+
+/* =====================================================================
+   (Marketplace module end)
+   ===================================================================== */
+
+
 function renderUsersView(){
   document.getElementById('view-users').innerHTML = `
     <div class="panel glass">
@@ -3297,7 +3782,11 @@ const RENDER_MAP = {
   mydeals: renderMyDealsView,
   myprojects: renderMyProjectsView,
   mytasks: renderMyTasksView,
-  myproject: renderMyProjectView
+  myproject: renderMyProjectView,
+  products: renderProductsView,
+  productsales: renderProductSalesView,
+  myproducts: renderMyProductsView,
+  mydownloads: renderMyDownloadsView
 };
 function renderAll(){
   if(!CURRENT_USER) return;
@@ -3371,3 +3860,4 @@ document.addEventListener('DOMContentLoaded', bootstrap);
 </script>
 </body>
 </html>
+
