@@ -321,29 +321,6 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
 .modal-close:hover{background:rgba(255,255,255,0.12);}
 .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
 .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
-#aiWidgetBtn{
-  display:none;position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:50%;
-  background:linear-gradient(135deg,#7c3aed,#4f46e5);align-items:center;justify-content:center;
-  font-size:24px;cursor:pointer;box-shadow:0 8px 24px rgba(79,70,229,0.5);z-index:900;transition:.2s;
-}
-#aiWidgetBtn:hover{transform:scale(1.08);}
-#aiChatPanel{
-  display:none;position:fixed;bottom:90px;right:24px;width:380px;max-width:92vw;height:520px;max-height:75vh;
-  background:#141926;border:1px solid rgba(255,255,255,0.1);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,0.5);
-  z-index:900;flex-direction:column;overflow:hidden;
-}
-#aiChatPanel.open{display:flex;}
-.ai-chat-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
-.ai-chat-title{font-weight:700;font-size:14px;}
-.ai-chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
-.ai-msg{max-width:88%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;}
-.ai-msg-user{align-self:flex-end;background:#4f46e5;color:#fff;border-bottom-right-radius:3px;}
-.ai-msg-bot{align-self:flex-start;background:rgba(255,255,255,0.06);border-bottom-left-radius:3px;}
-.ai-msg-action{align-self:flex-start;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:12px;padding:12px;font-size:13px;max-width:92%;}
-.ai-msg-action .aa-btns{display:flex;gap:8px;margin-top:8px;}
-.ai-chat-input-row{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(255,255,255,0.08);}
-.ai-chat-input-row input{flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;}
-.ai-typing{align-self:flex-start;font-size:12px;color:var(--text-faint);padding:4px 13px;}
 .doc-preview{background:#fff;color:#111;border-radius:12px;padding:30px;font-size:13px;line-height:1.7;max-height:520px;overflow-y:auto;white-space:pre-wrap;font-family:Georgia,serif;}
 .template-chip-lg{display:flex;align-items:center;padding:12px 18px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);cursor:pointer;font-size:13.5px;font-weight:600;transition:.15s;}
 .template-chip-lg:hover{background:rgba(255,255,255,0.07);}
@@ -452,6 +429,23 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
   .stat-grid{grid-template-columns:repeat(2,1fr);}
   .avatar-name,.avatar-role{display:none;}
   #toastContainer{left:14px;right:14px;top:14px;max-width:none;}
+  .modal-box{padding:20px 18px 18px;max-height:92vh;}
+  .modal-foot{flex-direction:column-reverse;}
+  .modal-foot .btn{width:100%;}
+  .panel{padding:16px;}
+  .panel-head{gap:8px;}
+  .panel-actions{width:100%;}
+  .panel-actions .btn{flex:1;justify-content:center;}
+  .toolbar{flex-direction:column;align-items:stretch;}
+  .search-box{max-width:none;}
+  .filter-select{width:100%;}
+  .form-row .field{grid-column:1/-1 !important;}
+  table.data-table{font-size:12.5px;}
+  .row-actions .btn-icon{width:34px;height:34px;}
+}
+@media (max-width:380px){
+  .stat-grid{grid-template-columns:1fr;}
+  .stat-card .stat-val{font-size:22px;}
 }
 
 /* ---------- MULTI-ROLE ADDITIONS ---------- */
@@ -478,6 +472,7 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
 </head>
 <body>
 
@@ -636,28 +631,13 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-mydownloads"></section>
       <!-- ============ AI DOCUMENT GENERATOR ============ -->
       <section class="view-section" id="view-docgen"></section>
+      <section class="view-section" id="view-help"></section>
     </main>
   </div>
 </div>
 
 <div id="modalRoot"></div>
 <div id="toastContainer"></div>
-
-<!-- AI ASSISTANT WIDGET -->
-<div id="aiWidgetBtn" onclick="toggleAiChat()" title="AI Assistant">✨</div>
-<div id="aiChatPanel">
-  <div class="ai-chat-head">
-    <div class="ai-chat-title">✨ ELITHNIC Assistant</div>
-    <button class="modal-close" onclick="toggleAiChat(false)">✕</button>
-  </div>
-  <div class="ai-chat-body" id="aiChatBody">
-    <div class="ai-msg ai-msg-bot">Hi! Ask me anything about your leads, projects, products or sales — or ask me to convert a lead to a project.</div>
-  </div>
-  <div class="ai-chat-input-row">
-    <input type="text" id="aiChatInput" placeholder="e.g. Kitne closers Product X pe assigned hain?" onkeydown="if(event.key==='Enter')sendAiChatMessage()">
-    <button class="btn btn-primary btn-sm" onclick="sendAiChatMessage()">→</button>
-  </div>
-</div>
 
 <script>
 /* =====================================================================
@@ -1142,8 +1122,6 @@ function showApp(){
   renderAll();
   navigateTo('dashboard');
   startRealtimeSync();
-  const aiBtn = document.getElementById('aiWidgetBtn');
-  if(aiBtn) aiBtn.style.display = (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'closer') ? 'flex' : 'none';
 }
 function applyRoleUI(){
   const u = CURRENT_USER;
@@ -1160,6 +1138,7 @@ const NAV_CONFIG = {
       {view:'dashboard', ic:'⌂', label:'Dashboard'},
       {view:'kanban', ic:'▦', label:'Pipeline'}
     ]},
+    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
     {group:'Sales', items:[
       {view:'leads', ic:'◎', label:'Leads', badge:'navLeadsBadge'},
       {view:'closers', ic:'◈', label:'Closers'}
@@ -1189,6 +1168,7 @@ const NAV_CONFIG = {
   ],
   closer:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
     {group:'Sales', items:[
       {view:'myleads', ic:'◎', label:'My Leads'},
       {view:'mydeals', ic:'$', label:'My Deals & Commission'}
@@ -1196,19 +1176,18 @@ const NAV_CONFIG = {
     {group:'Marketplace', items:[
       {view:'myproducts', ic:'⊞', label:'My Products'}
     ]},
-    {group:'Tools', items:[
-      {view:'docgen', ic:'▤', label:'AI Documents'}
-    ]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   dp:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
     {group:'Delivery', items:[{view:'myprojects', ic:'▣', label:'My Projects'}]},
     {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   freelancer:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
     {group:'Work', items:[{view:'mytasks', ic:'✦', label:'My Tasks'}]},
     {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
@@ -1257,7 +1236,8 @@ const VIEW_META = {
   productsales:{title:'Product Sales', sub:'All product sales, closers and commissions'},
   myproducts:{title:'My Products', sub:'Source code products assigned to you to sell'},
   mydownloads:{title:'My Products', sub:'Your purchased products and downloads'},
-  docgen:{title:'AI Documents', sub:'Generate contracts, invoices & proposals in seconds'}
+  docgen:{title:'AI Documents', sub:'Generate contracts, invoices & proposals in seconds'},
+  help:{title:'Help & Contact', sub:'How things work, and how to reach us'}
 };
 
 function navigateTo(view){
@@ -1721,6 +1701,23 @@ function renderDashboard(){
   if(CURRENT_USER.role === 'freelancer'){ renderFreelancerDashboard(); return; }
   if(CURRENT_USER.role === 'client'){ renderClientDashboard(); return; }
 }
+function renderProductQuickStats(){
+  const products = getAll('products');
+  if(!products.length) return emptyState('⊞','No products yet','Add products to see closer assignments & sales stats here.');
+  const rows = products.map(p=>{
+    const sales = productSalesForProduct(p.id);
+    const revenue = sales.reduce((s,x)=>s+(Number(x.amount)||Number(p.price)||0),0);
+    return { p, closerCount:(p.assignedCloserIds||[]).length, salesCount:sales.length, revenue };
+  }).sort((a,b)=> b.revenue - a.revenue);
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Closers Assigned</th><th>Total Sales</th><th>Revenue</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr>
+      <td class="cell-strong" style="cursor:pointer" onclick="openProductDetail('${r.p.id}')">${escapeHtml(r.p.name)}</td>
+      <td>${r.closerCount}</td>
+      <td>${r.salesCount}</td>
+      <td>${fmtMoney(r.revenue)}</td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
 function renderAdminDashboard(){
   const s = dashboardStats();
   const leads = getAll('leads').slice().sort((a,b)=> new Date(b.createdDate)-new Date(a.createdDate)).slice(0,5);
@@ -1749,6 +1746,15 @@ function renderAdminDashboard(){
           <div class="stat-val">${c.val}</div>
           <div class="stat-label">${c.label}</div>
         </div>`).join('')}
+    </div>
+    <div class="dash-grid2">
+      <div class="panel glass">
+        <div class="panel-head">
+          <div class="panel-title">Product Performance — Quick Stats</div>
+          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('products')">View All Products</button></div>
+        </div>
+        ${renderProductQuickStats()}
+      </div>
     </div>
     <div class="dash-grid2">
       <div class="panel glass">
@@ -2888,10 +2894,7 @@ function renderSettingsView(){
     ${isAdmin ? `
     <div class="panel glass">
       <div class="panel-head"><div class="panel-title">AI Assistant</div></div>
-      <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Powers the AI Assistant chat (bottom-right ✨ button) — it can answer questions about your leads, projects, products & sales, and can perform actions like converting a lead to a project when you ask it to. Uses Google Gemini (free tier available). Your key is saved only in this browser's local storage and is sent directly from your browser to Google — it never passes through any ELITHNIC server.</p>
-      <div class="field"><label>Google Gemini API Key</label><input type="password" id="settingsAiKey" placeholder="AIza..." value="${escapeHtml(localStorage.getItem('elithnic_ai_key')||'')}"></div>
-      <button class="btn btn-primary btn-sm" onclick="saveAiKey()">Save Key</button>
-      <button class="btn btn-ghost btn-sm" onclick="clearAiKey()">Remove Key</button>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Powered by a secure proxy — no API key needed here anymore. Just use the ✨ button bottom-right to chat.</p>
     </div>
     <div class="panel glass">
       <div class="panel-head"><div class="panel-title">Recovery Key</div></div>
@@ -3875,8 +3878,8 @@ function renderDocGenView(){
         <div class="panel-title">4. Preview &amp; Export</div>
         <div class="panel-actions">
           <button class="btn btn-ghost btn-sm" onclick="copyELDocText()">📋 Copy</button>
-          <button class="btn btn-primary btn-sm" onclick="downloadELDocumentPDF()">⬇ Download PDF</button>
-          <button class="btn btn-ghost btn-sm" onclick="printELDocument()">🖨 Print</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadELDocumentWord()">📄 Open in Google Docs</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadELDocumentPDF()">⬇ Download PDF</button>
         </div>
       </div>
       <div class="doc-preview" id="docOutputPreview"></div>
@@ -4006,6 +4009,30 @@ We look forward to the opportunity to work together.`;
   DOCGEN_STATE.lastTemplateName = DOC_TEMPLATES[DOCGEN_STATE.template].name;
   logActivity('Document', `${DOC_TEMPLATES[DOCGEN_STATE.template].name} generated for ${client}`);
 }
+function downloadELDocumentWord(){
+  const text = document.getElementById('docOutputPreview').textContent;
+  if(!text){ toast('Generate a document first', 'error'); return; }
+  if(typeof htmlDocx === 'undefined'){ toast('Document library failed to load — check your internet connection', 'error'); return; }
+  const htmlBody = text.split('\n').map(line => {
+    const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<p style="margin:0 0 6px 0;">${esc || '&nbsp;'}</p>`;
+  }).join('');
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;}
+  </style></head><body>${htmlBody}</body></html>`;
+  const blob = htmlDocx.asBlob(fullHtml);
+  const safeName = (DOCGEN_STATE.lastClient||'document').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  const safeTemplate = (DOCGEN_STATE.lastTemplateName||'doc').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeTemplate}-${safeName}.docx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Downloaded as Word doc — open it and it\'ll load straight into Google Docs', 'success');
+}
 function downloadELDocumentPDF(){
   const text = document.getElementById('docOutputPreview').textContent;
   if(!text){ toast('Generate a document first', 'error'); return; }
@@ -4041,6 +4068,77 @@ function printELDocument(){
   w.document.write(`<pre style="font-family:Georgia,serif;font-size:14px;line-height:1.7;white-space:pre-wrap;padding:40px;color:#111;">${text.replace(/</g,'&lt;')}</pre>`);
   w.document.close();
   setTimeout(()=>w.print(), 300);
+}
+
+function renderHelpView(){
+  const role = CURRENT_USER.role;
+  const roleGuides = {
+    admin: {
+      title: 'Admin Overview',
+      steps: [
+        'Leads come in through your team\'s closers (My Leads → they add their own) or directly via Leads.',
+        'Once a deal is finalized, open the lead and use "Convert to Project" — it pre-fills a project from the lead\'s details.',
+        'Track delivery through Projects, manage payouts via Payments, and list digital products for sale via Products.',
+        'Use Settings for platform configuration, Backup & Export for data safety, and Activity Log to review recent actions across the team.'
+      ]
+    },
+    closer: {
+      title: 'How Things Work — For Closers',
+      steps: [
+        'Bring a lead: go to My Leads → "+ Add Lead" and fill in the client\'s details. It\'s automatically assigned to you.',
+        'Track it: set a follow-up date on the lead — it\'ll show up as a reminder on your dashboard so nothing slips through.',
+        'Close it: once the client confirms the deal, update the lead\'s status. Our team will take it from there and convert it into an active project.',
+        'Get paid: your commission and payment status is always visible under "My Deals & Commission".',
+        'Sell more: check "My Products" — you can also sell listed digital products and earn commission on those too.'
+      ]
+    },
+    dp: {
+      title: 'How Things Work — For Delivery Partners',
+      steps: [
+        'Projects assigned to you for delivery show up under "My Projects".',
+        'Open a project to see the full brief, requirements, and deadline.',
+        'As you work, add delivery notes and deliverables directly from the project view — this keeps the client and admin updated on progress.',
+        'Once everything is delivered and approved, the project moves to completed.',
+        'Track your payout status anytime under "My Payments".'
+      ]
+    },
+    freelancer: {
+      title: 'How Things Work — For Freelancers',
+      steps: [
+        'When a project needs your skillset, it will appear under "My Tasks".',
+        'Open the task to see the full brief and requirements.',
+        'Submit your work by adding your deliverable (file link or notes) directly from the project view — no separate submission process needed.',
+        'Once your work is reviewed and approved, it\'s marked complete.',
+        'Track what you\'re owed and what\'s already been paid under "My Payments".'
+      ]
+    }
+  };
+  const guide = roleGuides[role] || roleGuides.closer;
+
+  document.getElementById('view-help').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">What is ELITHNIC?</div></div>
+      <p style="font-size:13.5px;color:var(--text-dim);line-height:1.7;">
+        ELITHNIC is our internal platform for managing leads, projects, deliveries and payments — everything in one place,
+        so work stays organized and transparent for everyone involved. Whatever your role, this is where you'll track your
+        work and see exactly where things stand.
+      </p>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">${guide.title}</div></div>
+      <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px;">
+        ${guide.steps.map(s=>`<li style="font-size:13.5px;color:var(--text);line-height:1.6;">${s}</li>`).join('')}
+      </ol>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Need Help?</div></div>
+      <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:14px;">If anything is unclear or you run into an issue, reach out directly — happy to help.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="mailto:vansharma258@gmail.com" class="btn btn-primary btn-sm" style="text-decoration:none;">✉ Email Us</a>
+        <a href="https://wa.me/919717738735" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">💬 WhatsApp</a>
+      </div>
+    </div>
+  `;
 }
 
 function renderUsersView(){
@@ -4231,7 +4329,8 @@ const RENDER_MAP = {
   productsales: renderProductSalesView,
   myproducts: renderMyProductsView,
   mydownloads: renderMyDownloadsView,
-  docgen: renderDocGenView
+  docgen: renderDocGenView,
+  help: renderHelpView
 };
 function renderAll(){
   if(!CURRENT_USER) return;
@@ -4298,163 +4397,6 @@ function handleGlobalSearch(q){
 function closeGlobalSearch(){
   document.getElementById('globalSearchResults').classList.remove('active');
   document.getElementById('globalSearchInput').value='';
-}
-
-/* =====================================================================
-   AI ASSISTANT — chat widget, direct-from-browser Claude calls
-   ===================================================================== */
-let AI_CHAT_HISTORY = [];
-let AI_LAST_ACTION = null;
-
-function toggleAiChat(state){
-  const panel = document.getElementById('aiChatPanel');
-  if(state === undefined) state = !panel.classList.contains('open');
-  panel.classList.toggle('open', state);
-}
-
-function aiAppendMessage(role, html){
-  const body = document.getElementById('aiChatBody');
-  const div = document.createElement('div');
-  div.className = role === 'user' ? 'ai-msg ai-msg-user' : (role==='action' ? 'ai-msg-action' : 'ai-msg ai-msg-bot');
-  div.innerHTML = html;
-  body.appendChild(div);
-  body.scrollTop = body.scrollHeight;
-  return div;
-}
-
-function buildAiSnapshot(){
-  const isAdmin = CURRENT_USER.role === 'admin';
-  let leadsRaw = getAll('leads');
-  let projectsRaw = getAll('projects');
-  if(!isAdmin){
-    leadsRaw = leadsRaw.filter(l => l.assignedCloserId === CURRENT_USER.entityId);
-    projectsRaw = projectsRaw.filter(p => p.closerId === CURRENT_USER.entityId);
-  }
-  const leads = leadsRaw.map(l=>({id:l.id, client:l.clientName, service:l.service, budget:l.budget, status:l.status, closer:closerName(l.assignedCloserId), score:computeLeadScore(l), followUp:l.followUpDate||null}));
-  const projects = projectsRaw.map(p=>({id:p.id, client:p.clientName, service:p.service, value:p.totalPrice, status:p.status, closer:closerName(p.closerId), trackingId:p.trackingId}));
-  const closers = isAdmin ? getAll('closers').map(c=>({id:c.id, name:c.name, commissionRate:c.commissionRate})) : [];
-  const products = getAll('products').map(p=>{
-    const sales = productSalesForProduct(p.id);
-    const base = { id:p.id, name:p.name, category:p.category, price:p.price };
-    if(isAdmin){
-      return Object.assign(base, {
-        assignedClosers: (p.assignedCloserIds||[]).map(id=>closerName(id)),
-        assignedClosersCount: (p.assignedCloserIds||[]).length,
-        totalSales: sales.length,
-        totalRevenue: sales.reduce((s,x)=>s+(Number(x.amount)||Number(p.price)||0),0)
-      });
-    }
-    // closer view: only their own sales of this product
-    const mySales = sales.filter(s=>s.closerId===CURRENT_USER.entityId);
-    return Object.assign(base, { assignedToMe: (p.assignedCloserIds||[]).includes(CURRENT_USER.entityId), mySalesCount: mySales.length });
-  });
-  return { leads, projects, closers, products, today: todayISO(), viewingAs: isAdmin ? 'admin (full access)' : 'closer (own records only)' };
-}
-
-async function sendAiChatMessage(){
-  const input = document.getElementById('aiChatInput');
-  const msg = input.value.trim();
-  if(!msg) return;
-  const apiKey = localStorage.getItem('elithnic_ai_key');
-  if(!apiKey){
-    aiAppendMessage('bot', 'No API key set. Go to <b>Settings → AI Assistant</b> and add your Google Gemini API key first.');
-    return;
-  }
-  aiAppendMessage('user', escapeHtml(msg));
-  input.value = '';
-  const typing = document.createElement('div');
-  typing.className = 'ai-typing';
-  typing.textContent = 'Thinking…';
-  document.getElementById('aiChatBody').appendChild(typing);
-  document.getElementById('aiChatBody').scrollTop = 9e9;
-
-  AI_CHAT_HISTORY.push({ role:'user', content: msg });
-
-  const snapshot = buildAiSnapshot();
-  const systemPrompt = `You are the ELITHNIC Assistant, embedded inside Vansh's agency CRM (ELITHNIC). You have full read access to the current data snapshot (JSON) provided below. Answer questions about leads, projects, products, sales, and closers using ONLY this data — be specific and use real numbers/names from it.
-
-You can also propose ONE action per turn if the user explicitly asks you to do something (e.g. "convert this lead to a project"). Supported actions:
-- convert_lead_to_project: { "leadId": "<id>" }
-
-Respond with STRICT JSON only, no markdown fences, no extra text, in this exact shape:
-{"reply": "<your natural-language answer or confirmation question, in the same language style the user used>", "action": null OR {"type":"convert_lead_to_project","leadId":"...","summary":"short human summary of what this will do"}}
-
-Only include an action if the user clearly asked for it. If they asked a question, action must be null. If a leadId isn't obvious from the data (e.g. ambiguous client name), ask a clarifying question in "reply" and leave action null.
-
-DATA SNAPSHOT:
-${JSON.stringify(snapshot)}`;
-
-  try{
-    const geminiHistory = AI_CHAT_HISTORY.slice(-10).map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts:[{ text: systemPrompt }] },
-        contents: geminiHistory,
-        generationConfig: { maxOutputTokens: 800, temperature: 0.4 }
-      })
-    });
-    const data = await resp.json();
-    typing.remove();
-    if(!resp.ok){
-      aiAppendMessage('bot', 'Error: ' + escapeHtml(data.error?.message || 'Could not reach Gemini API'));
-      return;
-    }
-    const rawText = (data.candidates?.[0]?.content?.parts||[]).map(b=>b.text||'').join('\n').trim();
-    if(!rawText){
-      aiAppendMessage('bot', 'No response from Gemini — it may have blocked the request. Try rephrasing.');
-      return;
-    }
-    let parsed;
-    try{
-      const cleaned = rawText.replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-      parsed = JSON.parse(cleaned);
-    }catch(e){
-      aiAppendMessage('bot', escapeHtml(rawText));
-      AI_CHAT_HISTORY.push({ role:'assistant', content: rawText });
-      return;
-    }
-    AI_CHAT_HISTORY.push({ role:'assistant', content: rawText });
-    aiAppendMessage('bot', escapeHtml(parsed.reply||''));
-
-    if(parsed.action && parsed.action.type === 'convert_lead_to_project'){
-      const lead = getById('leads', parsed.action.leadId);
-      if(lead){
-        AI_LAST_ACTION = parsed.action;
-        aiAppendMessage('action', `<b>Proposed action:</b> ${escapeHtml(parsed.action.summary || 'Convert lead to project')}
-          <div class="aa-btns">
-            <button class="btn btn-primary btn-sm" onclick="aiConfirmAction()">✓ Confirm</button>
-            <button class="btn btn-ghost btn-sm" onclick="aiCancelAction()">✕ Cancel</button>
-          </div>`);
-      }
-    }
-  }catch(err){
-    typing.remove();
-    aiAppendMessage('bot', 'Network error — check your internet connection. (' + escapeHtml(err.message) + ')');
-  }
-}
-
-function aiConfirmAction(){
-  if(!AI_LAST_ACTION) return;
-  if(AI_LAST_ACTION.type === 'convert_lead_to_project'){
-    if(CURRENT_USER.role !== 'admin'){
-      aiAppendMessage('bot', 'Only an admin can convert leads to projects.');
-      AI_LAST_ACTION = null;
-      return;
-    }
-    toggleAiChat(false);
-    convertLeadToProject(AI_LAST_ACTION.leadId);
-    aiAppendMessage('bot', 'Done — opened the pre-filled project form for you to review and save.');
-  }
-  AI_LAST_ACTION = null;
-}
-function aiCancelAction(){
-  AI_LAST_ACTION = null;
-  aiAppendMessage('bot', 'Cancelled — no changes made.');
 }
 
 async function bootstrap(){
