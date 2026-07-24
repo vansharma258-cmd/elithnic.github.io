@@ -162,7 +162,9 @@ input,select,textarea{outline:none;}
   -webkit-backdrop-filter:blur(24px) saturate(150%);
   transition:transform .3s var(--ease);
   overflow-y:auto;
+  transform:translateX(-100%);
 }
+.sidebar.open{transform:translateX(0);}
 .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 22px;}
 .brand-mark{width:34px;height:34px;border-radius:11px;background:linear-gradient(140deg,#7c3aed,#4c1d95);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
 .brand-name{font-weight:800;font-size:15.5px;letter-spacing:-0.2px;}
@@ -181,9 +183,9 @@ input,select,textarea{outline:none;}
 .sidebar-foot{margin-top:auto;padding:10px 8px;}
 .logout-btn{width:100%;}
 
-.main-area{flex:1;min-width:0;margin-left:236px;min-height:100vh;display:flex;flex-direction:column;}
+.main-area{flex:1;min-width:0;margin-left:0;min-height:100vh;display:flex;flex-direction:column;}
 .topbar{
-  position:sticky;top:0;z-index:30;
+  position:sticky;top:0;z-index:41;
   display:flex;align-items:center;gap:14px;
   padding:14px 26px;
   background:rgba(11,15,26,0.55);
@@ -191,7 +193,7 @@ input,select,textarea{outline:none;}
   backdrop-filter:blur(18px) saturate(150%);
   -webkit-backdrop-filter:blur(18px) saturate(150%);
 }
-.menu-toggle{display:none;}
+.menu-toggle{display:flex;position:relative;z-index:45;}
 .topbar-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;}
 .topbar-sub{font-size:12px;color:var(--text-faint);margin-top:1px;}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
@@ -415,11 +417,6 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
   .dash-grid2,.dash-grid3{grid-template-columns:1fr;}
 }
 @media (max-width:880px){
-  .sidebar{transform:translateX(-100%);}
-  .sidebar.open{transform:translateX(0);}
-  .sidebar-overlay.show{display:block;}
-  .main-area{margin-left:0;}
-  .menu-toggle{display:flex;}
   .form-grid2{grid-template-columns:1fr;}
   .notif-panel{right:14px;width:88vw;}
 }
@@ -4359,8 +4356,11 @@ function wireStaticEvents(){
 
   document.getElementById('logoutBtn').addEventListener('click', handleLogout);
   document.getElementById('menuToggle').addEventListener('click', () => {
-    document.getElementById('sidebar').classList.add('open');
-    document.getElementById('sidebarOverlay').classList.add('show');
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebarOverlay');
+    const isOpen = sb.classList.contains('open');
+    sb.classList.toggle('open', !isOpen);
+    ov.classList.toggle('show', !isOpen);
   });
   document.getElementById('sidebarOverlay').addEventListener('click', closeSidebarMobile);
   document.getElementById('notifBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleNotifPanel(); });
