@@ -264,6 +264,23 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
 
 .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.2px;white-space:nowrap;}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
+.lead-score-hot{background:rgba(248,113,113,0.15);color:#fca5a5;}
+.lead-score-warm{background:rgba(251,191,36,0.15);color:#fde68a;}
+.lead-score-cold{background:rgba(56,189,248,0.15);color:#7dd3fc;}
+.global-search-wrap{position:relative;margin-left:18px;flex:1;max-width:340px;}
+.global-search-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px 9px 32px;color:var(--text);font-size:13px;}
+.global-search-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:13px;pointer-events:none;}
+.global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg-elev);border:1px solid rgba(255,255,255,0.1);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.5);max-height:340px;overflow-y:auto;z-index:400;display:none;}
+.global-search-results.active{display:block;}
+.gs-group-label{padding:8px 12px 4px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:700;}
+.gs-item{padding:9px 12px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;align-items:center;}
+.gs-item:hover{background:rgba(255,255,255,0.06);}
+.gs-item-sub{color:var(--text-faint);font-size:11px;}
+.gs-empty{padding:14px 12px;color:var(--text-faint);font-size:12.5px;text-align:center;}
+.followup-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;}
+.followup-item:last-child{border-bottom:none;}
+.followup-date-tag{font-size:11px;padding:3px 8px;border-radius:8px;background:rgba(251,191,36,0.15);color:#fde68a;}
+.followup-date-tag.overdue{background:rgba(248,113,113,0.15);color:#fca5a5;}
 .badge-new{background:rgba(56,189,248,0.15);color:#7dd3fc;}
 .badge-contacted{background:rgba(251,191,36,0.15);color:#fde68a;}
 .badge-followup{background:rgba(167,139,250,0.15);color:#c4b5fd;}
@@ -304,6 +321,33 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
 .modal-close:hover{background:rgba(255,255,255,0.12);}
 .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
 .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+#aiWidgetBtn{
+  display:none;position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);align-items:center;justify-content:center;
+  font-size:24px;cursor:pointer;box-shadow:0 8px 24px rgba(79,70,229,0.5);z-index:900;transition:.2s;
+}
+#aiWidgetBtn:hover{transform:scale(1.08);}
+#aiChatPanel{
+  display:none;position:fixed;bottom:90px;right:24px;width:380px;max-width:92vw;height:520px;max-height:75vh;
+  background:#141926;border:1px solid rgba(255,255,255,0.1);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,0.5);
+  z-index:900;flex-direction:column;overflow:hidden;
+}
+#aiChatPanel.open{display:flex;}
+.ai-chat-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.ai-chat-title{font-weight:700;font-size:14px;}
+.ai-chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.ai-msg{max-width:88%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;}
+.ai-msg-user{align-self:flex-end;background:#4f46e5;color:#fff;border-bottom-right-radius:3px;}
+.ai-msg-bot{align-self:flex-start;background:rgba(255,255,255,0.06);border-bottom-left-radius:3px;}
+.ai-msg-action{align-self:flex-start;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:12px;padding:12px;font-size:13px;max-width:92%;}
+.ai-msg-action .aa-btns{display:flex;gap:8px;margin-top:8px;}
+.ai-chat-input-row{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(255,255,255,0.08);}
+.ai-chat-input-row input{flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;}
+.ai-typing{align-self:flex-start;font-size:12px;color:var(--text-faint);padding:4px 13px;}
+.doc-preview{background:#fff;color:#111;border-radius:12px;padding:30px;font-size:13px;line-height:1.7;max-height:520px;overflow-y:auto;white-space:pre-wrap;font-family:Georgia,serif;}
+.template-chip-lg{display:flex;align-items:center;padding:12px 18px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);cursor:pointer;font-size:13.5px;font-weight:600;transition:.15s;}
+.template-chip-lg:hover{background:rgba(255,255,255,0.07);}
+.template-chip-lg.active{background:var(--accent-soft);border-color:var(--accent);color:#e9d8ff;}
 .detail-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;}
 .detail-row span:first-child{color:var(--text-dim);}
 .detail-row span:last-child{font-weight:700;}
@@ -433,6 +477,7 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
      existing inline onclick="..." handler in this app keeps working unmodified) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -526,6 +571,11 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
         <div class="topbar-title" id="topbarTitle">Dashboard</div>
         <div class="topbar-sub" id="topbarSub">Welcome back — here's what's happening today</div>
       </div>
+      <div class="global-search-wrap">
+        <span class="global-search-ic">⌕</span>
+        <input type="text" class="global-search-input" id="globalSearchInput" placeholder="Search leads, clients, projects…" oninput="handleGlobalSearch(this.value)" onfocus="handleGlobalSearch(this.value)">
+        <div class="global-search-results" id="globalSearchResults"></div>
+      </div>
       <div class="topbar-right">
         <button class="icon-btn" id="notifBtn">🔔<span class="icon-dot" id="notifDot"></span></button>
         <div class="avatar-chip">
@@ -584,12 +634,30 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-myproducts"></section>
       <!-- ============ MY DOWNLOADS (client — demo + zip after payment) ============ -->
       <section class="view-section" id="view-mydownloads"></section>
+      <!-- ============ AI DOCUMENT GENERATOR ============ -->
+      <section class="view-section" id="view-docgen"></section>
     </main>
   </div>
 </div>
 
 <div id="modalRoot"></div>
 <div id="toastContainer"></div>
+
+<!-- AI ASSISTANT WIDGET -->
+<div id="aiWidgetBtn" onclick="toggleAiChat()" title="AI Assistant">✨</div>
+<div id="aiChatPanel">
+  <div class="ai-chat-head">
+    <div class="ai-chat-title">✨ ELITHNIC Assistant</div>
+    <button class="modal-close" onclick="toggleAiChat(false)">✕</button>
+  </div>
+  <div class="ai-chat-body" id="aiChatBody">
+    <div class="ai-msg ai-msg-bot">Hi! Ask me anything about your leads, projects, products or sales — or ask me to convert a lead to a project.</div>
+  </div>
+  <div class="ai-chat-input-row">
+    <input type="text" id="aiChatInput" placeholder="e.g. Kitne closers Product X pe assigned hain?" onkeydown="if(event.key==='Enter')sendAiChatMessage()">
+    <button class="btn btn-primary btn-sm" onclick="sendAiChatMessage()">→</button>
+  </div>
+</div>
 
 <script>
 /* =====================================================================
@@ -1074,6 +1142,8 @@ function showApp(){
   renderAll();
   navigateTo('dashboard');
   startRealtimeSync();
+  const aiBtn = document.getElementById('aiWidgetBtn');
+  if(aiBtn) aiBtn.style.display = (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'closer') ? 'flex' : 'none';
 }
 function applyRoleUI(){
   const u = CURRENT_USER;
@@ -1107,6 +1177,9 @@ const NAV_CONFIG = {
       {view:'products', ic:'⊞', label:'Products', badge:'navProductsBadge'},
       {view:'productsales', ic:'⊙', label:'Product Sales'}
     ]},
+    {group:'Tools', items:[
+      {view:'docgen', ic:'▤', label:'AI Documents'}
+    ]},
     {group:'System', items:[
       {view:'users', ic:'☻', label:'Users'},
       {view:'activity', ic:'≡', label:'Activity Log'},
@@ -1122,6 +1195,9 @@ const NAV_CONFIG = {
     ]},
     {group:'Marketplace', items:[
       {view:'myproducts', ic:'⊞', label:'My Products'}
+    ]},
+    {group:'Tools', items:[
+      {view:'docgen', ic:'▤', label:'AI Documents'}
     ]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
@@ -1177,10 +1253,11 @@ const VIEW_META = {
   myprojects:{title:'My Projects', sub:'Projects assigned to you for delivery'},
   mytasks:{title:'My Tasks', sub:'Work assigned to you'},
   myproject:{title:'My Project', sub:'Live status of your project with ELITHNIC'},
-  products:{title:'Products', sub:'Manage your source code marketplace listings'},
+  products:{title:'Products', sub:'Manage your digital products — apps, ebooks, templates & more'},
   productsales:{title:'Product Sales', sub:'All product sales, closers and commissions'},
   myproducts:{title:'My Products', sub:'Source code products assigned to you to sell'},
-  mydownloads:{title:'My Products', sub:'Your purchased products and downloads'}
+  mydownloads:{title:'My Products', sub:'Your purchased products and downloads'},
+  docgen:{title:'AI Documents', sub:'Generate contracts, invoices & proposals in seconds'}
 };
 
 function navigateTo(view){
@@ -1217,7 +1294,90 @@ function leadOptions(){ return getAll('leads').map(c=>({value:c.id,label:c.clien
 function closerName(id){ const c=getById('closers',id); return c? c.name : '—'; }
 function dpName(id){ const c=getById('deliveryPartners',id); return c? c.name : '—'; }
 function freelancerName(id){ const c=getById('freelancers',id); return c? c.name : '—'; }
+/* ---------- WHATSAPP CLICK-TO-CHAT (no backend needed) ---------- */
+function waNumberClean(num){
+  let n = String(num||'').replace(/[^0-9]/g,'');
+  if(n.length===10) n = '91'+n; // default to India country code if missing
+  return n;
+}
+function notifyLeadWhatsApp(leadId){
+  const l = getById('leads', leadId);
+  if(!l) return;
+  const closer = getById('closers', l.assignedCloserId);
+  const score = leadScoreMeta(l);
+  let target, message;
+  if(closer && closer.whatsapp){
+    target = closer.whatsapp;
+    message = `Hi ${closer.name}, new/updated lead assigned to you:\n\n` +
+      `*Client:* ${l.clientName}\n` +
+      `*Service:* ${l.service||'—'}\n` +
+      `*Budget:* ${fmtMoney(l.budget)}\n` +
+      `*Status:* ${l.status}\n` +
+      `*Lead Score:* ${score.label} (${score.score}/100)\n` +
+      (l.followUpDate ? `*Follow-up Due:* ${fmtDate(l.followUpDate)}\n` : '') +
+      `\n— via ELITHNIC`;
+  } else {
+    target = l.whatsapp;
+    message = `Hi ${l.clientName}, thanks for reaching out to ELITHNIC regarding ${l.service||'our services'}. We'll be in touch shortly!`;
+  }
+  if(!target){ toast('No WhatsApp number found for this lead/closer', 'error'); return; }
+  const url = `https://wa.me/${waNumberClean(target)}?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank');
+  logActivity('Notification', `WhatsApp notification opened for lead: ${l.clientName}`);
+}
+
+/* ---------- LEAD → PROJECT CONVERSION ---------- */
+function convertLeadToProject(leadId){
+  const l = getById('leads', leadId);
+  if(!l) return;
+  closeModal();
+  openFormModal('projects');
+  setTimeout(()=>{
+    const map = {
+      f_clientName: l.clientName,
+      f_service: l.service||'',
+      f_leadId: l.id,
+      f_closerId: l.assignedCloserId||'',
+      f_totalPrice: l.budget||0
+    };
+    Object.keys(map).forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.value = map[id];
+    });
+    toast('Project pre-filled from lead — review & save', 'success');
+  }, 50);
+}
+
 function clientName(id){ const c=getById('clients',id); return c? c.name : '—'; }
+
+/* ---------- LEAD SCORING ---------- */
+const LEAD_SCORE_WEIGHTS = { budget:40, engagement:35, recency:25 };
+function computeLeadScore(lead){
+  const budget = Number(lead.budget)||0;
+  const engagement = Number(lead.engagement)||5;
+  const daysOld = Math.max(0, daysBetween(lead.createdDate||todayISO(), todayISO()));
+  const budgetScore = Math.min(budget/1000, 100);
+  const engagementScore = engagement*10;
+  const recencyScore = Math.max(0, 100 - daysOld*5);
+  const w = LEAD_SCORE_WEIGHTS;
+  const total = (budgetScore*w.budget/100)+(engagementScore*w.engagement/100)+(recencyScore*w.recency/100);
+  return Math.round(Math.min(total,100));
+}
+function leadScoreMeta(lead){
+  const score = computeLeadScore(lead);
+  if(score>=70) return {score, label:'Hot', cls:'lead-score-hot'};
+  if(score>=40) return {score, label:'Warm', cls:'lead-score-warm'};
+  return {score, label:'Cold', cls:'lead-score-cold'};
+}
+function leadScoreBadgeHTML(lead){
+  const m = leadScoreMeta(lead);
+  return `<span class="badge ${m.cls}" title="Lead score ${m.score}/100">${m.label} · ${m.score}</span>`;
+}
+function todaysFollowUps(){
+  const today = todayISO();
+  return getAll('leads').filter(l => l.followUpDate && l.followUpDate <= today && l.status !== 'Closed' && l.status !== 'Lost')
+    .sort((a,b)=> (a.followUpDate||'').localeCompare(b.followUpDate||''));
+}
 
 const ENTITY_CONFIG = {
   leads: { coll:'leads', label:'Lead', icon:'◎', idPrefix:'lead',
@@ -1229,6 +1389,8 @@ const ENTITY_CONFIG = {
       {key:'budget', label:'Budget (₹)', type:'number', col:6},
       {key:'assignedCloserId', label:'Assigned Closer', type:'select', dynOptions:closerOptions, emptyLabel:'Unassigned', col:6},
       {key:'status', label:'Status', type:'select', options:LEAD_STATUSES, default:'New Lead', col:6},
+      {key:'engagement', label:'Engagement Level (1-10)', type:'number', min:1, max:10, default:5, col:6},
+      {key:'followUpDate', label:'Next Follow-up Date', type:'date', col:6},
       {key:'requirements', label:'Requirements / Notes', type:'textarea', col:12}
     ]
   },
@@ -1400,6 +1562,15 @@ async function submitEntityForm(){
   }else if(entityKey === 'projects'){
     logActivity('Project', (isNew?'New project created: ':'Project updated: ')+record.clientName+' ('+record.trackingId+')');
     if(isNew) pushNotification('Project created for '+record.clientName+' — '+record.trackingId, 'project');
+    if(isNew && record.leadId){
+      const srcLead = getById('leads', record.leadId);
+      if(srcLead && srcLead.status !== 'Closed'){
+        try{
+          await upsert('leads', Object.assign({}, srcLead, { status:'Closed' }));
+          logActivity('Lead', 'Lead "'+srcLead.clientName+'" marked Closed (converted to project '+record.trackingId+')');
+        }catch(e){ console.error('Could not auto-update lead status:', e.message); }
+      }
+    }
     if(before){
       if(before.status !== record.status){
         logActivity('Project', 'Project '+record.trackingId+' status changed: '+before.status+' → '+record.status);
@@ -1585,8 +1756,8 @@ function renderAdminDashboard(){
           <div class="panel-title">Recent Leads</div>
           <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('leads')">View All</button></div>
         </div>
-        ${leads.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Budget</th><th>Status</th></tr></thead><tbody>
-          ${leads.map(l=>`<tr><td class="cell-strong">${escapeHtml(l.clientName)}</td><td>${escapeHtml(l.service||'—')}</td><td>${fmtMoney(l.budget)}</td><td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td></tr>`).join('')}
+        ${leads.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Budget</th><th>Score</th><th>Status</th></tr></thead><tbody>
+          ${leads.map(l=>`<tr><td class="cell-strong">${escapeHtml(l.clientName)}</td><td>${escapeHtml(l.service||'—')}</td><td>${fmtMoney(l.budget)}</td><td>${leadScoreBadgeHTML(l)}</td><td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td></tr>`).join('')}
         </tbody></table></div>` : emptyState('◎','No leads yet','New leads you add will show up here.')}
       </div>
       <div class="panel glass">
@@ -1600,9 +1771,15 @@ function renderAdminDashboard(){
     </div>
     <div class="dash-grid2">
       <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">Today's Follow-ups</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('leads')">View All Leads</button></div></div>
+        ${renderFollowUpWidget()}
+      </div>
+      <div class="panel glass">
         <div class="panel-head"><div class="panel-title">Recent Activity</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('activity')">View All</button></div></div>
         ${activities.length ? activities.map(a=>activityItemHTML(a)).join('') : emptyState('≡','No activity yet','Actions across the platform will be logged here.')}
       </div>
+    </div>
+    <div class="dash-grid2">
       <div class="panel glass">
         <div class="panel-head"><div class="panel-title">Lead Pipeline Snapshot</div></div>
         ${pipelineSnapshotHTML()}
@@ -1610,6 +1787,20 @@ function renderAdminDashboard(){
     </div>
   `;
   renderNavBadges();
+}
+function renderFollowUpWidget(scopedList){
+  const today = todayISO();
+  const source = scopedList || getAll('leads');
+  const items = source.filter(l => l.followUpDate && l.followUpDate <= today && l.status !== 'Closed' && l.status !== 'Lost')
+    .sort((a,b)=> (a.followUpDate||'').localeCompare(b.followUpDate||''));
+  if(!items.length) return emptyState('✓','All caught up','No follow-ups due today.');
+  return items.map(l => {
+    const overdue = l.followUpDate < today;
+    return `<div class="followup-item">
+      <span class="cell-strong" style="cursor:pointer" onclick="openLeadDetails('${l.id}')">${escapeHtml(l.clientName)} <span class="cell-dim">— ${escapeHtml(l.service||'')}</span></span>
+      <span class="followup-date-tag ${overdue?'overdue':''}">${overdue?'Overdue · ':''}${fmtDate(l.followUpDate)}</span>
+    </div>`;
+  }).join('');
 }
 function pipelineSnapshotHTML(){
   const leads = getAll('leads');
@@ -1679,17 +1870,20 @@ function renderLeadsTable(){
   const wrap = document.getElementById('leadsTableWrap');
   if(!rows.length){ wrap.innerHTML = emptyState('◎','No leads found','Try adjusting your search or filters, or add a new lead.'); return; }
   wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
-    <th>Client</th><th>Contact</th><th>Service</th><th>Budget</th><th>Closer</th><th>Status</th><th>Created</th><th></th>
+    <th>Client</th><th>Contact</th><th>Service</th><th>Budget</th><th>Score</th><th>Closer</th><th>Status</th><th>Follow-up</th><th>Created</th><th></th>
   </tr></thead><tbody>
     ${rows.map(l=>`<tr>
       <td class="cell-strong" style="cursor:pointer" onclick="openLeadDetails('${l.id}')">${escapeHtml(l.clientName)}</td>
       <td><div>${escapeHtml(l.whatsapp)}</div><div class="cell-dim">${escapeHtml(l.email||'')}</div></td>
       <td>${escapeHtml(l.service||'—')}</td>
       <td>${fmtMoney(l.budget)}</td>
+      <td>${leadScoreBadgeHTML(l)}</td>
       <td>${escapeHtml(closerName(l.assignedCloserId))}</td>
       <td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td>
+      <td class="cell-dim">${l.followUpDate ? fmtDate(l.followUpDate) : '—'}</td>
       <td class="cell-dim">${fmtDate(l.createdDate)}</td>
       <td><div class="row-actions">
+        <button class="btn btn-ghost btn-icon" onclick="notifyLeadWhatsApp('${l.id}')" title="Notify on WhatsApp">💬</button>
         <button class="btn btn-ghost btn-icon" onclick="openFormModal('leads','${l.id}')" title="Edit">✎</button>
         <button class="btn btn-danger btn-icon" onclick="confirmDelete('leads','${l.id}','${escapeHtml(l.clientName)}')" title="Delete">🗑</button>
       </div></td>
@@ -1710,7 +1904,13 @@ function openLeadDetails(id){
     <div class="detail-row"><span>Budget</span><span>${fmtMoney(l.budget)}</span></div>
     <div class="detail-row"><span>Assigned Closer</span><span>${escapeHtml(closerName(l.assignedCloserId))}</span></div>
     <div class="detail-row"><span>Status</span><span><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></span></div>
+    <div class="detail-row"><span>Lead Score</span><span>${leadScoreBadgeHTML(l)}</span></div>
+    <div class="detail-row"><span>Next Follow-up</span><span>${l.followUpDate ? fmtDate(l.followUpDate) : 'Not set'}</span></div>
     <div class="detail-row"><span>Created</span><span>${fmtDate(l.createdDate)}</span></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="notifyLeadWhatsApp('${l.id}')">💬 Notify on WhatsApp</button>
+      ${(!CURRENT_USER || CURRENT_USER.role==='admin') ? `<button class="btn btn-ghost" style="flex:1;" onclick="convertLeadToProject('${l.id}')">→ Convert to Project</button>` : ''}
+    </div>
     <div class="detail-section-title">Requirements</div>
     <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">${escapeHtml(l.requirements||'No additional notes provided.')}</p>
     <div class="detail-section-title">Notes Log</div>
@@ -2687,6 +2887,13 @@ function renderSettingsView(){
     </div>
     ${isAdmin ? `
     <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">AI Assistant</div></div>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Powers the AI Assistant chat (bottom-right ✨ button) — it can answer questions about your leads, projects, products & sales, and can perform actions like converting a lead to a project when you ask it to. Uses Google Gemini (free tier available). Your key is saved only in this browser's local storage and is sent directly from your browser to Google — it never passes through any ELITHNIC server.</p>
+      <div class="field"><label>Google Gemini API Key</label><input type="password" id="settingsAiKey" placeholder="AIza..." value="${escapeHtml(localStorage.getItem('elithnic_ai_key')||'')}"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveAiKey()">Save Key</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearAiKey()">Remove Key</button>
+    </div>
+    <div class="panel glass">
       <div class="panel-head"><div class="panel-title">Recovery Key</div></div>
       <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">Your recovery key lets you reset the admin password if you ever forget it. Anyone shown this key earlier should keep it safe — for security it isn't displayed again here.</p>
       <button class="btn btn-ghost btn-sm" onclick="regenerateRecoveryKey()">Generate New Recovery Key</button>
@@ -2698,6 +2905,17 @@ function renderSettingsView(){
       <div class="settings-row"><div><div class="s-title">Quick Actions</div><div class="s-sub">Manage backups and data resets</div></div><button class="btn btn-ghost btn-sm" onclick="navigateTo('backup')">Go to Backup &amp; Export</button></div>
     </div>` : ''}
   `;
+}
+function saveAiKey(){
+  const val = document.getElementById('settingsAiKey').value.trim();
+  if(!val){ toast('Enter a valid API key', 'error'); return; }
+  localStorage.setItem('elithnic_ai_key', val);
+  toast('AI Assistant key saved', 'success');
+}
+function clearAiKey(){
+  localStorage.removeItem('elithnic_ai_key');
+  document.getElementById('settingsAiKey').value='';
+  toast('AI Assistant key removed', 'success');
 }
 function regenerateRecoveryKey(){
   const newKey = randomRecoveryKey();
@@ -2920,6 +3138,12 @@ function renderCloserDashboard(){
         ${deals.length ? deals.slice(0,5).map(p=>`<div class="detail-row"><span>${escapeHtml(p.clientName)} <span class="cell-dim">(${p.trackingId})</span></span><span>${fmtMoney(p.closerCommission)}</span></div>`).join('') : emptyState('$','No deals yet','Projects tied to your closed leads will show up here.')}
       </div>
     </div>
+    <div class="dash-grid2">
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">Today's Follow-ups</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('myleads')">View All Leads</button></div></div>
+        ${renderFollowUpWidget(leads)}
+      </div>
+    </div>
   `;
 }
 function renderMyLeadsView(){
@@ -3139,7 +3363,7 @@ function renderMyProjectView(){
 /* =====================================================================
    31. SOURCE CODE MARKETPLACE
    ===================================================================== */
-const PRODUCT_CATEGORIES = ['Web App','Mobile App','SaaS Tool','CRM / ERP','E-commerce','API / Backend','Chrome Extension','WordPress Plugin','Landing Page','Other'];
+const PRODUCT_CATEGORIES = ['Web App','Mobile App','SaaS Tool','CRM / ERP','E-commerce','API / Backend','Chrome Extension','WordPress Plugin','Landing Page','E-book / PDF','Online Course','Template Pack','Design Asset','Notion Template','Other'];
 const PRODUCT_STATUSES = ['Draft','Active','Paused'];
 const CLOSER_COMMISSION_RATE = 0.20; // 20% fixed for all product sales
 
@@ -3214,9 +3438,9 @@ function renderProductsTable(){
   if(st) rows = rows.filter(p=>p.status===st);
   const wrap = document.getElementById('productsTableWrap');
   if(!wrap) return;
-  if(!rows.length){ wrap.innerHTML = emptyState('⊞','No products found','Add your first source code product to get started.'); return; }
+  if(!rows.length){ wrap.innerHTML = emptyState('⊞','No products found','Add your first digital product — app, ebook, template or course — to get started.'); return; }
   wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
-    <th>App Name</th><th>Category</th><th>Price</th><th>Assigned Closers</th><th>Sales</th><th>Revenue</th><th>Status</th><th></th>
+    <th>Product Name</th><th>Category</th><th>Price</th><th>Assigned Closers</th><th>Sales</th><th>Revenue</th><th>Status</th><th></th>
   </tr></thead><tbody>
     ${rows.map(p=>{
       const sales = productSalesForProduct(p.id);
@@ -3247,7 +3471,7 @@ function openProductModal(productId){
   renderModal(`
     <div class="modal-head"><div class="modal-title">${p?'Edit Product':'Add New Product'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="form-grid2">
-      <div class="field" style="grid-column:1/-1"><label>App / Product Name *</label><input type="text" id="prd_name" value="${escapeHtml(p?.name||'')}"></div>
+      <div class="field" style="grid-column:1/-1"><label>Product Name * <span style="font-size:11px;color:var(--text-faint)">(name it anything — your app, ebook, template, course, etc.)</span></label><input type="text" id="prd_name" value="${escapeHtml(p?.name||'')}"></div>
       <div class="field"><label>Category</label><select id="prd_category">
         ${PRODUCT_CATEGORIES.map(c=>`<option value="${c}" ${c===(p?.category||'')?' selected':''}>${c}</option>`).join('')}
       </select></div>
@@ -3255,11 +3479,11 @@ function openProductModal(productId){
         ${PRODUCT_STATUSES.map(s=>`<option value="${s}" ${s===(p?.status||'Draft')?' selected':''}>${s}</option>`).join('')}
       </select></div>
       <div class="field"><label>Price (₹) *</label><input type="number" id="prd_price" value="${p?.price||''}"></div>
-      <div class="field"><label>App Description</label><input type="text" id="prd_description" placeholder="What this app does, in one line" value="${escapeHtml(p?.description||'')}"></div>
+      <div class="field"><label>Product Description</label><input type="text" id="prd_description" placeholder="What this product is, in one line" value="${escapeHtml(p?.description||'')}"></div>
       <div class="field" style="grid-column:1/-1"><label>Purpose / Demo Video URL <span style="font-size:11px;color:var(--text-faint)">(YouTube / Vimeo / direct) — sent to Closer</span></label><input type="url" id="prd_purposeVideo" value="${escapeHtml(p?.purposeVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
       <div class="field" style="grid-column:1/-1"><label>Setup / How-to-Run Video URL <span style="font-size:11px;color:var(--text-faint)">(released to client on payment)</span></label><input type="url" id="prd_setupVideo" value="${escapeHtml(p?.setupVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
-      <div class="field" style="grid-column:1/-1"><label>ZIP File URL <span style="font-size:11px;color:var(--text-faint)">(Google Drive / Dropbox direct download — released on payment)</span></label><input type="url" id="prd_zipUrl" value="${escapeHtml(p?.zipUrl||'')}" placeholder="https://drive.google.com/..."></div>
-      <div class="field"><label>ZIP Password</label><input type="text" id="prd_zipPass" value="${escapeHtml(p?.zipPassword||'')}" placeholder="Leave blank if no password"></div>
+      <div class="field" style="grid-column:1/-1"><label>Delivery File URL <span style="font-size:11px;color:var(--text-faint)">(ZIP, PDF, ebook, template — any direct download link — released on payment)</span></label><input type="url" id="prd_zipUrl" value="${escapeHtml(p?.zipUrl||'')}" placeholder="https://drive.google.com/..."></div>
+      <div class="field"><label>Access Password <span style="font-size:11px;color:var(--text-faint)">(optional)</span></label><input type="text" id="prd_zipPass" value="${escapeHtml(p?.zipPassword||'')}" placeholder="Leave blank if no password"></div>
       <div class="field"><label>Tech Stack / Tags</label><input type="text" id="prd_tags" value="${escapeHtml(p?.tags||'')}" placeholder="React, Node.js, Firebase…"></div>
     </div>
     <div class="detail-section-title">Assign Closers</div>
@@ -3354,7 +3578,7 @@ function openProductDetail(productId){
     ${videoEmbedHTML(p.setupVideoUrl, 'Setup Video')}
     <div class="detail-section-title">ZIP File &amp; Password (Admin Only)</div>
     <div class="detail-row"><span>ZIP URL</span><span>${p.zipUrl?`<a href="${escapeHtml(p.zipUrl)}" target="_blank" rel="noopener" style="color:var(--accent-2)">Open Link ↗</a>`:'—'}</span></div>
-    <div class="detail-row"><span>ZIP Password</span><span>${p.zipPassword ? `<code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:6px;">${escapeHtml(p.zipPassword)}</code>` : '<span class="cell-dim">No password</span>'}</span></div>
+    <div class="detail-row"><span>Access Password</span><span>${p.zipPassword ? `<code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:6px;">${escapeHtml(p.zipPassword)}</code>` : '<span class="cell-dim">No password</span>'}</span></div>
     <div class="detail-section-title">Assigned Closers (${assignedClosers.length})</div>
     ${assignedClosers.length ? assignedClosers.map(c=>`<div class="detail-row"><span>${escapeHtml(c.name)}</span><span class="role-pill role-closer">Closer</span></div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No closers assigned yet.</p>'}
     <div class="detail-section-title">Sales History</div>
@@ -3584,7 +3808,7 @@ function renderMyDownloadsView(){
               <a href="${escapeHtml(p.zipUrl||'#')}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">⬇ Download ZIP</a>
             </div>
             ${p.zipPassword?`<div style="margin-top:12px;padding:10px 12px;background:rgba(124,58,237,0.1);border-radius:10px;font-size:13px;">
-              <span style="color:var(--text-faint);">ZIP Password:</span>
+              <span style="color:var(--text-faint);">Access Password:</span>
               <code style="margin-left:8px;font-size:14px;font-weight:700;color:#e9d8ff;letter-spacing:1px;">${escapeHtml(p.zipPassword)}</code>
             </div>`:''}
           </div>` : `
@@ -3598,6 +3822,226 @@ function renderMyDownloadsView(){
    (Marketplace module end)
    ===================================================================== */
 
+/* =====================================================================
+   AI DOCUMENT GENERATOR MODULE
+   ===================================================================== */
+const DOC_TEMPLATES = {
+  contract:{name:'Service Contract', ic:'▤'},
+  invoice:{name:'Invoice', ic:'$'},
+  proposal:{name:'Proposal', ic:'◈'}
+};
+let DOCGEN_STATE = { template:'contract', leadId:'', projectId:'' };
+
+function docSourceOptions(){
+  const leads = getAll('leads').map(l=>({value:'lead:'+l.id, label:'Lead — '+l.clientName+' ('+(l.service||'—')+')'}));
+  const projects = getAll('projects').map(p=>({value:'project:'+p.id, label:'Project — '+p.clientName+' ('+(p.trackingId||'')+')'}));
+  return [...leads, ...projects];
+}
+
+function renderDocGenView(){
+  const sourceOpts = docSourceOptions();
+  document.getElementById('view-docgen').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">1. Choose Template</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${Object.keys(DOC_TEMPLATES).map(k=>`
+          <div class="template-chip-lg ${k===DOCGEN_STATE.template?'active':''}" onclick="selectDocTemplate('${k}')">
+            <span style="font-size:16px;margin-right:6px;">${DOC_TEMPLATES[k].ic}</span>${DOC_TEMPLATES[k].name}
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">2. Auto-fill from existing record (optional)</div></div>
+      <select class="filter-select" style="width:100%;max-width:420px;" id="docSourceSelect" onchange="autoFillFromSource(this.value)">
+        <option value="">— Start blank —</option>
+        ${sourceOpts.map(o=>`<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">3. Fill Details</div></div>
+      <div class="form-grid2">
+        <div class="field"><label>Client Name</label><input type="text" id="doc_clientName"></div>
+        <div class="field"><label>Company</label><input type="text" id="doc_company"></div>
+        <div class="field"><label>Service / Item</label><input type="text" id="doc_service"></div>
+        <div class="field"><label>Amount (₹)</label><input type="number" id="doc_amount"></div>
+        <div class="field"><label>Duration / Terms</label><input type="text" id="doc_duration" placeholder="e.g. 3 months, monthly retainer"></div>
+        <div class="field"><label>Due / Kickoff Date</label><input type="date" id="doc_date"></div>
+      </div>
+      <div class="field"><label>Extra Notes (optional)</label><textarea id="doc_notes" rows="2" placeholder="Any special clauses or notes..."></textarea></div>
+      <button class="btn btn-primary" onclick="generateELDocument()">✨ Generate Document</button>
+    </div>
+    <div class="panel glass" id="docOutputPanel" style="display:none;">
+      <div class="panel-head">
+        <div class="panel-title">4. Preview &amp; Export</div>
+        <div class="panel-actions">
+          <button class="btn btn-ghost btn-sm" onclick="copyELDocText()">📋 Copy</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadELDocumentPDF()">⬇ Download PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="printELDocument()">🖨 Print</button>
+        </div>
+      </div>
+      <div class="doc-preview" id="docOutputPreview"></div>
+    </div>
+  `;
+}
+function selectDocTemplate(k){ DOCGEN_STATE.template = k; renderDocGenView(); }
+function autoFillFromSource(val){
+  if(!val) return;
+  const [type,id] = val.split(':');
+  if(type==='lead'){
+    const l = getById('leads', id);
+    if(!l) return;
+    document.getElementById('doc_clientName').value = l.clientName||'';
+    document.getElementById('doc_service').value = l.service||'';
+    document.getElementById('doc_amount').value = l.budget||'';
+  } else if(type==='project'){
+    const p = getById('projects', id);
+    if(!p) return;
+    document.getElementById('doc_clientName').value = p.clientName||'';
+    document.getElementById('doc_service').value = p.service||'';
+    document.getElementById('doc_amount').value = p.totalPrice||'';
+    document.getElementById('doc_date').value = p.deadline||'';
+  }
+}
+function generateELDocument(){
+  const client = document.getElementById('doc_clientName').value.trim() || '[Client Name]';
+  const company = document.getElementById('doc_company').value.trim() || '[Company Name]';
+  const service = document.getElementById('doc_service').value.trim() || '[Service]';
+  const amount = document.getElementById('doc_amount').value || '0';
+  const duration = document.getElementById('doc_duration').value.trim() || '[Duration]';
+  const dateVal = document.getElementById('doc_date').value || todayISO();
+  const notes = document.getElementById('doc_notes').value.trim();
+  const amountFmt = Number(amount).toLocaleString('en-IN');
+  const today = new Date().toLocaleDateString('en-IN', {year:'numeric', month:'long', day:'numeric'});
+  const dateFmt = fmtDate(dateVal);
+
+  let doc = '';
+  if(DOCGEN_STATE.template==='contract'){
+    doc = `SERVICE AGREEMENT
+
+This Service Agreement ("Agreement") is entered into on ${today}, between:
+
+Service Provider: ELITHNIC
+Client: ${client}${company!=='[Company Name]' ? ' ('+company+')' : ''}
+
+1. SCOPE OF SERVICES
+The Service Provider agrees to deliver the following service to the Client:
+${service}
+
+2. TERM
+This Agreement shall remain in effect for: ${duration}
+
+3. PAYMENT TERMS
+Total Contract Value: ₹${amountFmt}
+Payment Due Date: ${dateFmt}
+Payment shall be made via mutually agreed method (bank transfer / UPI / other).
+
+4. RESPONSIBILITIES
+The Client agrees to provide timely information, access, and approvals required for the Service Provider to deliver the above scope. The Service Provider agrees to deliver services with professional diligence and within agreed timelines.
+
+5. CONFIDENTIALITY
+Both parties agree to keep confidential any proprietary business information shared during the course of this engagement.
+
+6. TERMINATION
+Either party may terminate this Agreement with 15 days written notice. Fees for work completed up to the termination date remain payable.
+
+${notes ? '7. ADDITIONAL TERMS\n' + notes + '\n' : ''}
+Agreed and accepted by:
+
+_______________________          _______________________
+ELITHNIC                                  ${client}
+Date: ${today}                            Date: ${today}`;
+  } else if(DOCGEN_STATE.template==='invoice'){
+    doc = `INVOICE
+
+Invoice Date: ${today}
+Due Date: ${dateFmt}
+Bill To: ${client}
+${company!=='[Company Name]' ? 'Company: '+company : ''}
+
+----------------------------------------
+Description                    Amount
+----------------------------------------
+${service}                     ₹${amountFmt}
+----------------------------------------
+TOTAL DUE                      ₹${amountFmt}
+----------------------------------------
+
+Payment Instructions:
+Please remit payment via bank transfer / UPI to the account details shared separately.
+
+${notes ? 'Notes: ' + notes : ''}
+
+Thank you for your business — ELITHNIC.`;
+  } else {
+    doc = `BUSINESS PROPOSAL
+
+Prepared for: ${client}${company!=='[Company Name]' ? ' ('+company+')' : ''}
+Prepared by: ELITHNIC
+Prepared on: ${today}
+
+OVERVIEW
+We are pleased to submit this proposal for: ${service}
+
+PROPOSED INVESTMENT
+Total Investment: ₹${amountFmt}
+Engagement Duration: ${duration}
+
+WHY WORK WITH US
+Our team brings proven experience delivering high-quality outcomes for businesses like yours, with a focus on measurable results and transparent communication throughout the engagement.
+
+NEXT STEPS
+1. Review this proposal
+2. Schedule a kickoff call
+3. Sign agreement & begin onboarding
+4. Kickoff by: ${dateFmt}
+
+${notes ? 'Additional Notes: ' + notes : ''}
+
+We look forward to the opportunity to work together.`;
+  }
+  document.getElementById('docOutputPreview').textContent = doc;
+  document.getElementById('docOutputPanel').style.display = 'block';
+  document.getElementById('docOutputPanel').scrollIntoView({behavior:'smooth'});
+  DOCGEN_STATE.lastClient = client;
+  DOCGEN_STATE.lastTemplateName = DOC_TEMPLATES[DOCGEN_STATE.template].name;
+  logActivity('Document', `${DOC_TEMPLATES[DOCGEN_STATE.template].name} generated for ${client}`);
+}
+function downloadELDocumentPDF(){
+  const text = document.getElementById('docOutputPreview').textContent;
+  if(!text){ toast('Generate a document first', 'error'); return; }
+  if(!window.jspdf){ toast('PDF library failed to load — check your internet connection', 'error'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'a4' });
+  const margin = 50;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const usableWidth = pageWidth - margin*2;
+  doc.setFont('times','normal');
+  doc.setFontSize(11);
+  const lines = doc.splitTextToSize(text, usableWidth);
+  let y = margin;
+  const lineHeight = 15;
+  lines.forEach(line => {
+    if(y > pageHeight - margin){ doc.addPage(); y = margin; }
+    doc.text(line, margin, y);
+    y += lineHeight;
+  });
+  const safeName = (DOCGEN_STATE.lastClient||'document').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  const safeTemplate = (DOCGEN_STATE.lastTemplateName||'doc').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  doc.save(`${safeTemplate}-${safeName}.pdf`);
+  toast('PDF downloaded', 'success');
+}
+function copyELDocText(){
+  const text = document.getElementById('docOutputPreview').textContent;
+  navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard','success'));
+}
+function printELDocument(){
+  const text = document.getElementById('docOutputPreview').textContent;
+  const w = window.open('', '_blank');
+  w.document.write(`<pre style="font-family:Georgia,serif;font-size:14px;line-height:1.7;white-space:pre-wrap;padding:40px;color:#111;">${text.replace(/</g,'&lt;')}</pre>`);
+  w.document.close();
+  setTimeout(()=>w.print(), 300);
+}
 
 function renderUsersView(){
   document.getElementById('view-users').innerHTML = `
@@ -3786,7 +4230,8 @@ const RENDER_MAP = {
   products: renderProductsView,
   productsales: renderProductSalesView,
   myproducts: renderMyProductsView,
-  mydownloads: renderMyDownloadsView
+  mydownloads: renderMyDownloadsView,
+  docgen: renderDocGenView
 };
 function renderAll(){
   if(!CURRENT_USER) return;
@@ -3824,6 +4269,192 @@ function wireStaticEvents(){
     const panel = document.getElementById('notifPanel');
     if(panel.classList.contains('show') && !panel.contains(e.target) && e.target.id !== 'notifBtn') panel.classList.remove('show');
   });
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.global-search-wrap');
+    if(wrap && !wrap.contains(e.target)) document.getElementById('globalSearchResults').classList.remove('active');
+  });
+}
+
+/* ---------- GLOBAL SEARCH ---------- */
+function handleGlobalSearch(q){
+  const box = document.getElementById('globalSearchResults');
+  q = (q||'').trim().toLowerCase();
+  if(!q){ box.classList.remove('active'); box.innerHTML=''; return; }
+  const leads = getAll('leads').filter(l => (l.clientName+(l.whatsapp||'')+(l.email||'')).toLowerCase().includes(q)).slice(0,5);
+  const clients = getAll('clients').filter(c => (c.name+(c.whatsapp||'')+(c.email||'')).toLowerCase().includes(q)).slice(0,5);
+  const projects = getAll('projects').filter(p => (p.clientName+(p.service||'')).toLowerCase().includes(q)).slice(0,5);
+  const groups = [
+    {label:'Leads', items:leads.map(l=>({title:l.clientName, sub:l.service||l.whatsapp, action:`closeGlobalSearch();openLeadDetails('${l.id}')`}))},
+    {label:'Clients', items:clients.map(c=>({title:c.name, sub:c.whatsapp||c.email||'', action:`closeGlobalSearch();navigateTo('clients')`}))},
+    {label:'Projects', items:projects.map(p=>({title:p.clientName, sub:p.service||'', action:`closeGlobalSearch();openProjectDetails('${p.id}')`}))}
+  ].filter(g=>g.items.length);
+  if(!groups.length){ box.innerHTML = '<div class="gs-empty">No matches found</div>'; box.classList.add('active'); return; }
+  box.innerHTML = groups.map(g => `
+    <div class="gs-group-label">${g.label}</div>
+    ${g.items.map(it=>`<div class="gs-item" onclick="${it.action}"><span>${escapeHtml(it.title)}</span><span class="gs-item-sub">${escapeHtml(it.sub)}</span></div>`).join('')}
+  `).join('');
+  box.classList.add('active');
+}
+function closeGlobalSearch(){
+  document.getElementById('globalSearchResults').classList.remove('active');
+  document.getElementById('globalSearchInput').value='';
+}
+
+/* =====================================================================
+   AI ASSISTANT — chat widget, direct-from-browser Claude calls
+   ===================================================================== */
+let AI_CHAT_HISTORY = [];
+let AI_LAST_ACTION = null;
+
+function toggleAiChat(state){
+  const panel = document.getElementById('aiChatPanel');
+  if(state === undefined) state = !panel.classList.contains('open');
+  panel.classList.toggle('open', state);
+}
+
+function aiAppendMessage(role, html){
+  const body = document.getElementById('aiChatBody');
+  const div = document.createElement('div');
+  div.className = role === 'user' ? 'ai-msg ai-msg-user' : (role==='action' ? 'ai-msg-action' : 'ai-msg ai-msg-bot');
+  div.innerHTML = html;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+  return div;
+}
+
+function buildAiSnapshot(){
+  const isAdmin = CURRENT_USER.role === 'admin';
+  let leadsRaw = getAll('leads');
+  let projectsRaw = getAll('projects');
+  if(!isAdmin){
+    leadsRaw = leadsRaw.filter(l => l.assignedCloserId === CURRENT_USER.entityId);
+    projectsRaw = projectsRaw.filter(p => p.closerId === CURRENT_USER.entityId);
+  }
+  const leads = leadsRaw.map(l=>({id:l.id, client:l.clientName, service:l.service, budget:l.budget, status:l.status, closer:closerName(l.assignedCloserId), score:computeLeadScore(l), followUp:l.followUpDate||null}));
+  const projects = projectsRaw.map(p=>({id:p.id, client:p.clientName, service:p.service, value:p.totalPrice, status:p.status, closer:closerName(p.closerId), trackingId:p.trackingId}));
+  const closers = isAdmin ? getAll('closers').map(c=>({id:c.id, name:c.name, commissionRate:c.commissionRate})) : [];
+  const products = getAll('products').map(p=>{
+    const sales = productSalesForProduct(p.id);
+    const base = { id:p.id, name:p.name, category:p.category, price:p.price };
+    if(isAdmin){
+      return Object.assign(base, {
+        assignedClosers: (p.assignedCloserIds||[]).map(id=>closerName(id)),
+        assignedClosersCount: (p.assignedCloserIds||[]).length,
+        totalSales: sales.length,
+        totalRevenue: sales.reduce((s,x)=>s+(Number(x.amount)||Number(p.price)||0),0)
+      });
+    }
+    // closer view: only their own sales of this product
+    const mySales = sales.filter(s=>s.closerId===CURRENT_USER.entityId);
+    return Object.assign(base, { assignedToMe: (p.assignedCloserIds||[]).includes(CURRENT_USER.entityId), mySalesCount: mySales.length });
+  });
+  return { leads, projects, closers, products, today: todayISO(), viewingAs: isAdmin ? 'admin (full access)' : 'closer (own records only)' };
+}
+
+async function sendAiChatMessage(){
+  const input = document.getElementById('aiChatInput');
+  const msg = input.value.trim();
+  if(!msg) return;
+  const apiKey = localStorage.getItem('elithnic_ai_key');
+  if(!apiKey){
+    aiAppendMessage('bot', 'No API key set. Go to <b>Settings → AI Assistant</b> and add your Google Gemini API key first.');
+    return;
+  }
+  aiAppendMessage('user', escapeHtml(msg));
+  input.value = '';
+  const typing = document.createElement('div');
+  typing.className = 'ai-typing';
+  typing.textContent = 'Thinking…';
+  document.getElementById('aiChatBody').appendChild(typing);
+  document.getElementById('aiChatBody').scrollTop = 9e9;
+
+  AI_CHAT_HISTORY.push({ role:'user', content: msg });
+
+  const snapshot = buildAiSnapshot();
+  const systemPrompt = `You are the ELITHNIC Assistant, embedded inside Vansh's agency CRM (ELITHNIC). You have full read access to the current data snapshot (JSON) provided below. Answer questions about leads, projects, products, sales, and closers using ONLY this data — be specific and use real numbers/names from it.
+
+You can also propose ONE action per turn if the user explicitly asks you to do something (e.g. "convert this lead to a project"). Supported actions:
+- convert_lead_to_project: { "leadId": "<id>" }
+
+Respond with STRICT JSON only, no markdown fences, no extra text, in this exact shape:
+{"reply": "<your natural-language answer or confirmation question, in the same language style the user used>", "action": null OR {"type":"convert_lead_to_project","leadId":"...","summary":"short human summary of what this will do"}}
+
+Only include an action if the user clearly asked for it. If they asked a question, action must be null. If a leadId isn't obvious from the data (e.g. ambiguous client name), ask a clarifying question in "reply" and leave action null.
+
+DATA SNAPSHOT:
+${JSON.stringify(snapshot)}`;
+
+  try{
+    const geminiHistory = AI_CHAT_HISTORY.slice(-10).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts:[{ text: systemPrompt }] },
+        contents: geminiHistory,
+        generationConfig: { maxOutputTokens: 800, temperature: 0.4 }
+      })
+    });
+    const data = await resp.json();
+    typing.remove();
+    if(!resp.ok){
+      aiAppendMessage('bot', 'Error: ' + escapeHtml(data.error?.message || 'Could not reach Gemini API'));
+      return;
+    }
+    const rawText = (data.candidates?.[0]?.content?.parts||[]).map(b=>b.text||'').join('\n').trim();
+    if(!rawText){
+      aiAppendMessage('bot', 'No response from Gemini — it may have blocked the request. Try rephrasing.');
+      return;
+    }
+    let parsed;
+    try{
+      const cleaned = rawText.replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+      parsed = JSON.parse(cleaned);
+    }catch(e){
+      aiAppendMessage('bot', escapeHtml(rawText));
+      AI_CHAT_HISTORY.push({ role:'assistant', content: rawText });
+      return;
+    }
+    AI_CHAT_HISTORY.push({ role:'assistant', content: rawText });
+    aiAppendMessage('bot', escapeHtml(parsed.reply||''));
+
+    if(parsed.action && parsed.action.type === 'convert_lead_to_project'){
+      const lead = getById('leads', parsed.action.leadId);
+      if(lead){
+        AI_LAST_ACTION = parsed.action;
+        aiAppendMessage('action', `<b>Proposed action:</b> ${escapeHtml(parsed.action.summary || 'Convert lead to project')}
+          <div class="aa-btns">
+            <button class="btn btn-primary btn-sm" onclick="aiConfirmAction()">✓ Confirm</button>
+            <button class="btn btn-ghost btn-sm" onclick="aiCancelAction()">✕ Cancel</button>
+          </div>`);
+      }
+    }
+  }catch(err){
+    typing.remove();
+    aiAppendMessage('bot', 'Network error — check your internet connection. (' + escapeHtml(err.message) + ')');
+  }
+}
+
+function aiConfirmAction(){
+  if(!AI_LAST_ACTION) return;
+  if(AI_LAST_ACTION.type === 'convert_lead_to_project'){
+    if(CURRENT_USER.role !== 'admin'){
+      aiAppendMessage('bot', 'Only an admin can convert leads to projects.');
+      AI_LAST_ACTION = null;
+      return;
+    }
+    toggleAiChat(false);
+    convertLeadToProject(AI_LAST_ACTION.leadId);
+    aiAppendMessage('bot', 'Done — opened the pre-filled project form for you to review and save.');
+  }
+  AI_LAST_ACTION = null;
+}
+function aiCancelAction(){
+  AI_LAST_ACTION = null;
+  aiAppendMessage('bot', 'Cancelled — no changes made.');
 }
 
 async function bootstrap(){
@@ -3860,4 +4491,3 @@ document.addEventListener('DOMContentLoaded', bootstrap);
 </script>
 </body>
 </html>
-
