@@ -780,9 +780,11 @@ async function persistSystemConfig(){
   saveLocalCache();
 }
 
+let DB_LOAD_FAILED = false;
 async function loadDB(){
   if(!FIREBASE_AVAILABLE){
     loadLocalCacheOnly();
+    DB_LOAD_FAILED = true;
     toast('Working offline — showing your last saved data', 'info');
   }else{
     try{
@@ -799,11 +801,13 @@ async function loadDB(){
         if(sys.meta) fresh.meta = sys.meta;
       }
       DB = fresh;
+      DB_LOAD_FAILED = false;
       saveLocalCache();
       console.log('[Firestore] Loaded all collections from Firestore.');
     }catch(err){
       console.error('[Firestore] Load failed, falling back to offline cache:', err.message);
       loadLocalCacheOnly();
+      DB_LOAD_FAILED = true;
       toast('Working offline — showing your last saved data', 'info');
     }
   }
@@ -988,6 +992,10 @@ function entityNameForUser(u){
 }
 
 async function ensureBootstrap(){
+  if(DB_LOAD_FAILED){
+    console.warn('[ELITHNIC] Skipping first-run setup — could not confirm database state (offline/network issue). Will retry on next successful load.');
+    return null;
+  }
   if(DB.users.length === 0){
     const key = randomRecoveryKey();
     DB.auth.recoveryKeyHash = await sha256(key);
@@ -2859,6 +2867,7 @@ function renderBackupView(){
       <div class="settings-row"><div><div class="s-title">Backup Database</div><div class="s-sub">Download a complete JSON snapshot of every record in ELITHNIC</div></div><button class="btn btn-ghost btn-sm" onclick="backupJSON()">⬇ Download Backup</button></div>
       <div class="settings-row"><div><div class="s-title">Import / Restore Backup</div><div class="s-sub">Restore your workspace from a previously exported JSON backup</div></div><button class="btn btn-ghost btn-sm" onclick="triggerImport()">⬆ Import Backup</button></div>
       <div class="settings-row"><div><div class="s-title">Reset Demo Data</div><div class="s-sub">Regenerate a fresh set of 50 leads, 20 projects and all demo users (CL/DP/FR/CT 01–10)</div></div><button class="btn btn-ghost btn-sm" onclick="confirmResetDemoData()">Reset Demo Data</button></div>
+      <div class="settings-row"><div><div class="s-title">Remove Demo Data Only</div><div class="s-sub">Deletes only the original demo accounts (CL/DP/FR/CT 01–10) and their leads/projects — your real data is untouched</div></div><button class="btn btn-danger btn-sm" onclick="confirmPurgeDemoData()">Remove Demo Data</button></div>
       <div class="settings-row"><div><div class="s-title">Reset Entire Database</div><div class="s-sub">Permanently erase all data and start fresh (empty workspace)</div></div><button class="btn btn-danger btn-sm" onclick="resetDatabase()">Reset Database</button></div>
     </div>
     <input type="file" id="importFileInput" accept="application/json" class="hidden" onchange="handleImportFile(event)">
@@ -3076,6 +3085,81 @@ async function generateDemoData(){
   await persistSystemConfig();
   logActivity('System', 'Demo data generated: 50 leads, 20 projects, 10 closers, 10 delivery partners, 10 freelancers, 10 clients');
 }
+function confirmPurgeDemoData(){
+  const demoLoginIds = [];
+  for(let i=1;i<=10;i++){ demoLoginIds.push('CL'+pad(i,2),'DP'+pad(i,2),'FR'+pad(i,2),'CT'+pad(i,2)); }
+  const demoUsers = getAll('users').filter(u => demoLoginIds.includes(u.loginId));
+  if(!demoUsers.length){
+    renderModal(`<div class="modal-head"><div class="modal-title">No Demo Data Found</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <p style="font-size:13.5px;color:var(--text-dim);">No demo accounts (CL01–CL10, DP01–DP10, FR01–FR10, CT01–CT10) were found in your data. Nothing to remove.</p>
+      <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">OK</button></div>`);
+    return;
+  }
+  const demoEntityIds = demoUsers.map(u=>u.entityId).filter(Boolean);
+  const affectedLeads = getAll('leads').filter(l => demoEntityIds.includes(l.assignedCloserId));
+  const affectedProjects = getAll('projects').filter(p => demoEntityIds.includes(p.closerId) || demoEntityIds.includes(p.dpId) || demoEntityIds.includes(p.freelancerId) || demoEntityIds.includes(p.clientId));
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Remove Demo Data?</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13.5px;color:var(--text-dim);line-height:1.6;">
+      This will permanently delete only the original demo accounts and anything tied to them — your real data stays untouched.
+    </p>
+    <div class="detail-row"><span>Demo user accounts</span><span>${demoUsers.length}</span></div>
+    <div class="detail-row"><span>Demo leads</span><span>${affectedLeads.length}</span></div>
+    <div class="detail-row"><span>Demo projects</span><span>${affectedProjects.length}</span></div>
+    <p style="font-size:12.5px;color:var(--text-faint);margin-top:10px;">This cannot be undone. Your admin account and any real closers/leads/projects you've added are not affected.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doPurgeDemoData()">Remove Demo Data</button>
+    </div>`);
+}
+async function doPurgeDemoData(){
+  toast('Removing demo data…', 'info');
+  const demoLoginIds = [];
+  for(let i=1;i<=10;i++){ demoLoginIds.push('CL'+pad(i,2),'DP'+pad(i,2),'FR'+pad(i,2),'CT'+pad(i,2)); }
+  const demoUsers = getAll('users').filter(u => demoLoginIds.includes(u.loginId));
+  const demoUserIds = demoUsers.map(u=>u.id);
+  const demoEntityIds = demoUsers.map(u=>u.entityId).filter(Boolean);
+
+  const demoLeads = getAll('leads').filter(l => demoEntityIds.includes(l.assignedCloserId));
+  const demoProjects = getAll('projects').filter(p => demoEntityIds.includes(p.closerId) || demoEntityIds.includes(p.dpId) || demoEntityIds.includes(p.freelancerId) || demoEntityIds.includes(p.clientId));
+  const demoClosers = getAll('closers').filter(c => demoEntityIds.includes(c.id));
+  const demoDPs = getAll('deliveryPartners').filter(d => demoEntityIds.includes(d.id));
+  const demoFreelancers = getAll('freelancers').filter(f => demoEntityIds.includes(f.id));
+  const demoClients = getAll('clients').filter(c => demoEntityIds.includes(c.id));
+
+  async function deleteDocs(coll, ids){
+    if(!ids.length) return;
+    if(FIREBASE_AVAILABLE){
+      for(let i=0;i<ids.length;i+=450){
+        const batch = fsdb.batch();
+        ids.slice(i,i+450).forEach(id => batch.delete(fsdb.collection(coll).doc(id)));
+        await batch.commit();
+      }
+    }
+  }
+  await deleteDocs('users', demoUserIds);
+  await deleteDocs('leads', demoLeads.map(x=>x.id));
+  await deleteDocs('projects', demoProjects.map(x=>x.id));
+  await deleteDocs('closers', demoClosers.map(x=>x.id));
+  await deleteDocs('deliveryPartners', demoDPs.map(x=>x.id));
+  await deleteDocs('freelancers', demoFreelancers.map(x=>x.id));
+  await deleteDocs('clients', demoClients.map(x=>x.id));
+
+  DB.users = DB.users.filter(u => !demoUserIds.includes(u.id));
+  DB.leads = DB.leads.filter(l => !demoLeads.some(x=>x.id===l.id));
+  DB.projects = DB.projects.filter(p => !demoProjects.some(x=>x.id===p.id));
+  DB.closers = DB.closers.filter(c => !demoClosers.some(x=>x.id===c.id));
+  DB.deliveryPartners = DB.deliveryPartners.filter(d => !demoDPs.some(x=>x.id===d.id));
+  DB.freelancers = DB.freelancers.filter(f => !demoFreelancers.some(x=>x.id===f.id));
+  DB.clients = DB.clients.filter(c => !demoClients.some(x=>x.id===c.id));
+  saveLocalCache();
+
+  closeModal();
+  toast(`Removed ${demoUserIds.length} demo accounts and related records`, 'success');
+  logActivity('System', 'Demo data purged by admin — real data preserved');
+  renderAll();
+}
+
 function confirmResetDemoData(){
   renderModal(`
     <div class="modal-head"><div class="modal-title">Reset Demo Data?</div><button class="modal-close" onclick="closeModal()">✕</button></div>
