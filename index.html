@@ -779,6 +779,7 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-myleads"></section>
       <!-- ============ MY DEALS / COMMISSION (closer) ============ -->
       <section class="view-section" id="view-mydeals"></section>
+      <section class="view-section" id="view-mypayments"></section>
       <!-- ============ MY PROJECTS (delivery partner) ============ -->
       <section class="view-section" id="view-myprojects"></section>
       <!-- ============ MY TASKS (freelancer) ============ -->
@@ -796,6 +797,8 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <!-- ============ AI DOCUMENT GENERATOR ============ -->
       <section class="view-section" id="view-docgen"></section>
       <section class="view-section" id="view-help"></section>
+      <section class="view-section" id="view-tickets"></section>
+      <section class="view-section" id="view-mytickets"></section>
     </main>
   </div>
 </div>
@@ -843,7 +846,7 @@ try{
 // Every top-level array collection in the app, 1:1 with a Firestore collection.
 // Document ID === the app's own record.id (never Firestore auto-IDs) so writes
 // are idempotent by nature — re-sending the same record can never create a duplicate.
-const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications','products','productSales'];
+const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications','products','productSales','tickets'];
 const FS_SYSTEM_DOC = FIREBASE_AVAILABLE ? fsdb.collection('system').doc('config') : null; // holds { auth, counters, meta }
 let FS_UNSUBSCRIBERS = [];
 
@@ -860,7 +863,8 @@ const STATUS_BADGE_CLASS = {
   'New Lead':'badge-new','Contacted':'badge-contacted','Follow Up':'badge-followup','Negotiation':'badge-negotiation',
   'Closed':'badge-closed','Lost':'badge-lost','Assigned':'badge-assigned','Freelancer Assigned':'badge-freelancerassigned',
   'In Progress':'badge-inprogress','Revision':'badge-revision','Delivered':'badge-delivered','Completed':'badge-completed',
-  'Pending':'badge-pending','Partial':'badge-partial','Paid':'badge-paid'
+  'Pending':'badge-pending','Partial':'badge-partial','Paid':'badge-paid',
+  'Open':'badge-new','Resolved':'badge-completed'
 };
 
 /* ---------------------------------------------------------------------
@@ -920,6 +924,7 @@ function defaultDB(){
     leads: [], closers: [], deliveryPartners: [], freelancers: [], clients: [], projects: [],
     activities: [], notifications: [],
     products: [], productSales: [],
+    tickets: [],
     counters: { lead:0, closer:0, dp:0, freelancer:0, client:0, project:1000, user:0 },
     meta: { createdAt: new Date().toISOString() }
   };
@@ -1310,7 +1315,10 @@ const NAV_CONFIG = {
       {view:'dashboard', ic:'⌂', label:'Dashboard'},
       {view:'kanban', ic:'▦', label:'Pipeline'}
     ]},
-    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
+    {group:'Support', items:[
+      {view:'help', ic:'?', label:'Help & Contact'},
+      {view:'tickets', ic:'◐', label:'Tickets', badge:'navTicketsBadge'}
+    ]},
     {group:'Sales', items:[
       {view:'leads', ic:'◎', label:'Leads', badge:'navLeadsBadge'},
       {view:'closers', ic:'◈', label:'Closers'}
@@ -1340,7 +1348,10 @@ const NAV_CONFIG = {
   ],
   closer:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
-    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
+    {group:'Support', items:[
+      {view:'help', ic:'?', label:'Help & Contact'},
+      {view:'mytickets', ic:'◐', label:'My Tickets'}
+    ]},
     {group:'Sales', items:[
       {view:'myleads', ic:'◎', label:'My Leads'},
       {view:'mydeals', ic:'$', label:'My Deals & Commission'}
@@ -1352,20 +1363,27 @@ const NAV_CONFIG = {
   ],
   dp:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
-    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
+    {group:'Support', items:[
+      {view:'help', ic:'?', label:'Help & Contact'},
+      {view:'mytickets', ic:'◐', label:'My Tickets'}
+    ]},
     {group:'Delivery', items:[{view:'myprojects', ic:'▣', label:'My Projects'}]},
     {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   freelancer:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
-    {group:'Support', items:[{view:'help', ic:'?', label:'Help & Contact'}]},
+    {group:'Support', items:[
+      {view:'help', ic:'?', label:'Help & Contact'},
+      {view:'mytickets', ic:'◐', label:'My Tickets'}
+    ]},
     {group:'Work', items:[{view:'mytasks', ic:'✦', label:'My Tasks'}]},
     {group:'Finance', items:[{view:'mypayments', ic:'$', label:'My Payments'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
   ],
   client:[
     {group:'Overview', items:[{view:'dashboard', ic:'⌂', label:'My Dashboard'}]},
+    {group:'Support', items:[{view:'mytickets', ic:'◐', label:'My Tickets'}]},
     {group:'Project', items:[{view:'myproject', ic:'▣', label:'My Project'}]},
     {group:'Marketplace', items:[{view:'mydownloads', ic:'⊞', label:'My Products'}]},
     {group:'System', items:[{view:'settings', ic:'⚙', label:'Settings'}]}
@@ -1401,6 +1419,7 @@ const VIEW_META = {
   users:{title:'Users', sub:'Manage every login account across your agency'},
   myleads:{title:'My Leads', sub:'Leads assigned to you'},
   mydeals:{title:'My Deals & Commission', sub:'Your closed deals and commission history'},
+  mypayments:{title:'My Payments', sub:'Track what you\'re owed and what\'s already been paid'},
   myprojects:{title:'My Projects', sub:'Projects assigned to you for delivery'},
   mytasks:{title:'My Tasks', sub:'Work assigned to you'},
   myproject:{title:'My Project', sub:'Live status of your project with ELAS'},
@@ -1409,7 +1428,9 @@ const VIEW_META = {
   myproducts:{title:'My Products', sub:'Source code products assigned to you to sell'},
   mydownloads:{title:'My Products', sub:'Your purchased products and downloads'},
   docgen:{title:'AI Documents', sub:'Generate contracts, invoices & proposals in seconds'},
-  help:{title:'Help & Contact', sub:'How things work, and how to reach us'}
+  help:{title:'Help & Contact', sub:'How things work, and how to reach us'},
+  tickets:{title:'Tickets', sub:'Every support ticket raised across your agency'},
+  mytickets:{title:'My Tickets', sub:'Raise a complaint or issue and track its status'}
 };
 
 function navigateTo(view){
@@ -1595,7 +1616,8 @@ const ENTITY_CONFIG = {
       {key:'deadline', label:'Deadline', type:'date', col:6},
       {key:'status', label:'Status', type:'select', options:PROJECT_STATUSES, default:'Assigned', col:6},
       {key:'closerCommissionPaid', label:'Closer commission has been paid out', type:'checkbox', col:6},
-      {key:'dpCommissionPaid', label:'Delivery partner commission has been paid out', type:'checkbox', col:6}
+      {key:'dpCommissionPaid', label:'Delivery partner commission has been paid out', type:'checkbox', col:6},
+      {key:'freelancerCostPaid', label:'Freelancer cost has been paid out', type:'checkbox', col:6}
     ]
   }
 };
@@ -1841,7 +1863,9 @@ function freelancerStats(flId){
   const projects = getAll('projects').filter(p => p.freelancerId === flId);
   const completedProjects = projects.filter(p => p.status === 'Completed').length;
   const totalEarnings = projects.reduce((s,p)=>s+(Number(p.freelancerCost)||0),0);
-  return { completedProjects, totalEarnings, totalProjects: projects.length };
+  const paidEarnings = projects.filter(p=>p.freelancerCostPaid).reduce((s,p)=>s+(Number(p.freelancerCost)||0),0);
+  const pendingEarnings = totalEarnings - paidEarnings;
+  return { completedProjects, totalEarnings, paidEarnings, pendingEarnings, totalProjects: projects.length };
 }
 function dashboardStats(){
   const leads = getAll('leads');
@@ -2006,9 +2030,11 @@ function renderNavBadges(){
   const leadsBadge = document.getElementById('navLeadsBadge');
   const projectsBadge = document.getElementById('navProjectsBadge');
   const productsBadge = document.getElementById('navProductsBadge');
+  const ticketsBadge = document.getElementById('navTicketsBadge');
   if(leadsBadge) leadsBadge.textContent = getAll('leads').filter(l=>!['Closed','Lost'].includes(l.status)).length;
   if(projectsBadge) projectsBadge.textContent = getAll('projects').filter(p=>p.status!=='Completed').length;
   if(productsBadge) productsBadge.textContent = getAll('products').filter(p=>p.status==='Active').length;
+  if(ticketsBadge) ticketsBadge.textContent = getAll('tickets').filter(t=>t.status!=='Resolved' && t.status!=='Closed').length;
 }
 
 /* ---------------------------------------------------------------------
@@ -2343,7 +2369,7 @@ function openProjectDetails(id){
       <div class="detail-row"><span>Client Account</span><span>${escapeHtml(clientName(p.clientId))}</span></div>
       <div class="detail-section-title">Financial Breakdown</div>
       <div class="detail-row"><span>Total Project Value</span><span>${fmtMoney(fin.total)}</span></div>
-      <div class="detail-row"><span>Freelancer Cost</span><span>− ${fmtMoney(fin.flCost)}</span></div>
+      <div class="detail-row"><span>Freelancer Cost</span><span>− ${fmtMoney(fin.flCost)} ${p.freelancerCostPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
       <div class="detail-row"><span>Closer Commission</span><span>− ${fmtMoney(fin.closerComm)} ${p.closerCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
       <div class="detail-row"><span>Delivery Partner Commission</span><span>− ${fmtMoney(fin.dpComm)} ${p.dpCommissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
       <div class="detail-row" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:10px;"><span style="font-weight:700;color:var(--text)">Agency Profit</span><span style="color:${fin.agencyProfit>=0?'var(--green)':'var(--red)'};font-size:15px;">${fmtMoney(fin.agencyProfit)}</span></div>
@@ -2389,6 +2415,7 @@ function openProjectDetails(id){
     bodyHTML = `
       <div class="detail-section-title">Your Payout</div>
       <div class="detail-row"><span>Amount for this project</span><span>${fmtMoney(fin.flCost)}</span></div>
+      <div class="detail-row"><span>Payout Status</span><span>${p.freelancerCostPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</span></div>
       ${deliverablesHTML}
       <div class="detail-section-title">Update Progress</div>
       <div style="display:flex;gap:8px;">
@@ -3440,6 +3467,38 @@ function renderMyLeadsTable(){
 function openMyLeadFormModal(){
   openFormModal('leads');
 }
+/* ---------- MY PAYMENTS (Freelancer & Delivery Partner earnings) ---------- */
+function renderMyPaymentsView(){
+  const role = CURRENT_USER.role;
+  const isFl = role === 'freelancer';
+  const st = isFl ? freelancerStats(CURRENT_USER.entityId) : dpStats(CURRENT_USER.entityId);
+  const projects = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
+  const amountKey = isFl ? 'freelancerCost' : 'dpCommission';
+  const paidKey = isFl ? 'freelancerCostPaid' : 'dpCommissionPaid';
+  const totalEarnings = isFl ? st.totalEarnings : st.totalEarnings;
+  const paidEarnings = st.paidEarnings;
+  const pendingEarnings = st.pendingEarnings;
+  document.getElementById('view-mypayments').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(totalEarnings)}</div><div class="stat-label">Total Earnings</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(paidEarnings)}</div><div class="stat-label">Paid</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${fmtMoney(pendingEarnings)}</div><div class="stat-label">Pending</div></div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">Payment History</div></div>
+      ${projects.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Tracking ID</th><th>Client</th><th>Project</th><th>Your Amount</th><th>Payout Status</th><th>Status</th></tr></thead><tbody>
+        ${projects.map(p=>`<tr>
+          <td class="cell-strong" style="cursor:pointer;color:var(--gold-2)" onclick="openProjectDetails('${p.id}')">${p.trackingId}</td>
+          <td>${escapeHtml(p.clientName)}</td>
+          <td>${escapeHtml(p.service||'')}</td>
+          <td>${fmtMoney(p[amountKey])}</td>
+          <td>${p[paidKey]?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          <td><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('$','No payments yet','Once a project is assigned to you and priced, your earnings and payout status will appear here.')}
+    </div>
+  `;
+}
 function renderMyDealsView(){
   const st = closerStats(CURRENT_USER.entityId);
   const projects = scopedProjects().slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
@@ -4389,6 +4448,150 @@ function renderHelpView(){
   `;
 }
 
+/* ---------------------------------------------------------------------
+   TICKET / COMPLAINT SYSTEM — anyone (any role) can raise a ticket,
+   gets a unique 6-digit ticket number, admin manages status.
+   --------------------------------------------------------------------- */
+const TICKET_STATUSES = ['Open','In Progress','Resolved','Closed'];
+function generateTicketNumber(){
+  const existing = new Set(getAll('tickets').map(t=>t.ticketNo));
+  let num;
+  do{ num = String(Math.floor(100000 + Math.random()*900000)); }while(existing.has(num));
+  return num;
+}
+function openRaiseTicketModal(){
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Raise a Ticket</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Subject *</label><input type="text" id="ticketSubject" placeholder="Short summary of the issue"></div>
+    <div class="field"><label>Category</label>
+      <select id="ticketCategory">
+        <option>Payment Issue</option>
+        <option>Project / Delivery Issue</option>
+        <option>Account / Login Issue</option>
+        <option>Technical Bug</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Description *</label><textarea id="ticketDescription" placeholder="Describe the issue in detail…" style="width:100%;min-height:100px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;"></textarea></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitRaiseTicket()">Raise Ticket</button>
+    </div>
+  `);
+}
+async function submitRaiseTicket(){
+  const subject = document.getElementById('ticketSubject').value.trim();
+  const category = document.getElementById('ticketCategory').value;
+  const description = document.getElementById('ticketDescription').value.trim();
+  if(!subject || !description){ toast('Please fill in subject and description', 'error'); return; }
+  const ticketNo = generateTicketNumber();
+  const rec = {
+    id: uid('ticket'),
+    ticketNo,
+    subject, category, description,
+    status: 'Open',
+    raisedByUserId: CURRENT_USER.id,
+    raisedByName: CURRENT_USER.name,
+    raisedByRole: CURRENT_USER.role,
+    createdDate: todayISO(),
+    createdAt: new Date().toISOString(),
+    adminNote: ''
+  };
+  await upsert('tickets', rec);
+  logActivity('Ticket', CURRENT_USER.name+' raised ticket #'+ticketNo+': '+subject);
+  closeModal();
+  toast('Ticket raised — your ticket number is #'+ticketNo, 'success');
+  renderAll();
+}
+function ticketBadgeClass(status){ return STATUS_BADGE_CLASS[status] || 'badge-new'; }
+function openTicketDetails(id){
+  const t = getById('tickets', id);
+  if(!t) return;
+  const isAdmin = CURRENT_USER.role === 'admin';
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Ticket #${t.ticketNo}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="detail-row"><span>Subject</span><span>${escapeHtml(t.subject)}</span></div>
+    <div class="detail-row"><span>Category</span><span>${escapeHtml(t.category||'—')}</span></div>
+    <div class="detail-row"><span>Raised By</span><span>${escapeHtml(t.raisedByName)} (${ROLE_LABELS[t.raisedByRole]||t.raisedByRole})</span></div>
+    <div class="detail-row"><span>Date</span><span>${fmtDate(t.createdDate)}</span></div>
+    <div class="detail-row"><span>Status</span><span><span class="badge ${ticketBadgeClass(t.status)}">${t.status}</span></span></div>
+    <div class="detail-section-title">Description</div>
+    <p style="font-size:13.5px;color:var(--text-dim);line-height:1.6;white-space:pre-wrap;">${escapeHtml(t.description)}</p>
+    ${t.adminNote ? `<div class="detail-section-title">Admin Response</div><p style="font-size:13.5px;color:var(--text);line-height:1.6;white-space:pre-wrap;">${escapeHtml(t.adminNote)}</p>` : ''}
+    ${isAdmin ? `
+      <div class="detail-section-title">Update Ticket</div>
+      <div class="field"><label>Status</label>
+        <select id="ticketStatusSelect">${TICKET_STATUSES.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Response / Note</label><textarea id="ticketAdminNote" style="width:100%;min-height:70px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;">${escapeHtml(t.adminNote||'')}</textarea></div>
+    ` : ''}
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      ${isAdmin ? `<button class="btn btn-primary" onclick="submitTicketUpdate('${t.id}')">Save Update</button>` : ''}
+    </div>
+  `);
+}
+async function submitTicketUpdate(id){
+  const t = getById('tickets', id);
+  if(!t) return;
+  t.status = document.getElementById('ticketStatusSelect').value;
+  t.adminNote = document.getElementById('ticketAdminNote').value.trim();
+  await upsert('tickets', t);
+  logActivity('Ticket', 'Ticket #'+t.ticketNo+' updated to '+t.status);
+  closeModal();
+  toast('Ticket updated', 'success');
+  renderAll();
+}
+function renderTicketsView(){
+  const tickets = getAll('tickets').slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  document.getElementById('view-tickets').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card glass"><div class="ic-badge bg-violet">◐</div><div class="stat-val">${tickets.length}</div><div class="stat-label">Total Tickets</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${tickets.filter(t=>t.status==='Open').length}</div><div class="stat-label">Open</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-blue">◐</div><div class="stat-val">${tickets.filter(t=>t.status==='In Progress').length}</div><div class="stat-label">In Progress</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${tickets.filter(t=>t.status==='Resolved'||t.status==='Closed').length}</div><div class="stat-label">Resolved / Closed</div></div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><div class="panel-title">All Tickets <span class="sm">${tickets.length} total</span></div></div>
+      ${tickets.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Ticket #</th><th>Subject</th><th>Raised By</th><th>Role</th><th>Category</th><th>Date</th><th>Status</th>
+      </tr></thead><tbody>
+        ${tickets.map(t=>`<tr style="cursor:pointer" onclick="openTicketDetails('${t.id}')">
+          <td class="cell-strong" style="color:var(--gold-2)">#${t.ticketNo}</td>
+          <td>${escapeHtml(t.subject)}</td>
+          <td>${escapeHtml(t.raisedByName)}</td>
+          <td>${ROLE_LABELS[t.raisedByRole]||t.raisedByRole}</td>
+          <td>${escapeHtml(t.category||'—')}</td>
+          <td>${fmtDate(t.createdDate)}</td>
+          <td><span class="badge ${ticketBadgeClass(t.status)}">${t.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('◐','No tickets yet','Complaints and issues raised by your team will appear here.')}
+    </div>
+  `;
+}
+function renderMyTicketsView(){
+  const tickets = getAll('tickets').filter(t=>t.raisedByUserId===CURRENT_USER.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  document.getElementById('view-mytickets').innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">My Tickets <span class="sm">${tickets.length} total</span></div>
+        <div class="panel-actions"><button class="btn btn-primary btn-sm" onclick="openRaiseTicketModal()">+ Raise Ticket</button></div>
+      </div>
+      ${tickets.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Ticket #</th><th>Subject</th><th>Category</th><th>Date</th><th>Status</th>
+      </tr></thead><tbody>
+        ${tickets.map(t=>`<tr style="cursor:pointer" onclick="openTicketDetails('${t.id}')">
+          <td class="cell-strong" style="color:var(--gold-2)">#${t.ticketNo}</td>
+          <td>${escapeHtml(t.subject)}</td>
+          <td>${escapeHtml(t.category||'—')}</td>
+          <td>${fmtDate(t.createdDate)}</td>
+          <td><span class="badge ${ticketBadgeClass(t.status)}">${t.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>` : emptyState('◐','No tickets raised yet','Got an issue or complaint? Raise a ticket and track it right here.')}
+    </div>
+  `;
+}
+
 function renderUsersView(){
   document.getElementById('view-users').innerHTML = `
     <div class="panel glass">
@@ -4570,6 +4773,7 @@ const RENDER_MAP = {
   users: renderUsersView,
   myleads: renderMyLeadsView,
   mydeals: renderMyDealsView,
+  mypayments: renderMyPaymentsView,
   myprojects: renderMyProjectsView,
   mytasks: renderMyTasksView,
   myproject: renderMyProjectView,
@@ -4578,7 +4782,9 @@ const RENDER_MAP = {
   myproducts: renderMyProductsView,
   mydownloads: renderMyDownloadsView,
   docgen: renderDocGenView,
-  help: renderHelpView
+  help: renderHelpView,
+  tickets: renderTicketsView,
+  mytickets: renderMyTicketsView
 };
 function renderAll(){
   if(!CURRENT_USER) return;
@@ -4672,11 +4878,19 @@ function handleGlobalSearch(q){
   if(!q){ box.classList.remove('active'); box.innerHTML=''; return; }
   const leads = getAll('leads').filter(l => (l.clientName+(l.whatsapp||'')+(l.email||'')).toLowerCase().includes(q)).slice(0,5);
   const clients = getAll('clients').filter(c => (c.name+(c.whatsapp||'')+(c.email||'')).toLowerCase().includes(q)).slice(0,5);
-  const projects = getAll('projects').filter(p => (p.clientName+(p.service||'')).toLowerCase().includes(q)).slice(0,5);
+  const projects = getAll('projects').filter(p => (p.clientName+(p.service||'')+(p.trackingId||'')).toLowerCase().includes(q)).slice(0,5);
+  const freelancers = getAll('freelancers').filter(f => (f.name+(f.whatsapp||'')+(f.email||'')+(f.skill||'')).toLowerCase().includes(q)).slice(0,5);
+  const closers = getAll('closers').filter(c => (c.name+(c.whatsapp||'')+(c.email||'')).toLowerCase().includes(q)).slice(0,5);
+  const dps = getAll('deliveryPartners').filter(d => (d.name+(d.whatsapp||'')+(d.email||'')).toLowerCase().includes(q)).slice(0,5);
+  const users = getAll('users').filter(u => (u.name+(u.loginId||'')).toLowerCase().includes(q)).slice(0,5);
   const groups = [
     {label:'Leads', items:leads.map(l=>({title:l.clientName, sub:l.service||l.whatsapp, action:`closeGlobalSearch();openLeadDetails('${l.id}')`}))},
     {label:'Clients', items:clients.map(c=>({title:c.name, sub:c.whatsapp||c.email||'', action:`closeGlobalSearch();navigateTo('clients')`}))},
-    {label:'Projects', items:projects.map(p=>({title:p.clientName, sub:p.service||'', action:`closeGlobalSearch();openProjectDetails('${p.id}')`}))}
+    {label:'Projects', items:projects.map(p=>({title:p.clientName, sub:(p.trackingId||'')+' · '+(p.service||''), action:`closeGlobalSearch();openProjectDetails('${p.id}')`}))},
+    {label:'Freelancers', items:freelancers.map(f=>({title:f.name, sub:f.skill||f.whatsapp||'', action:`closeGlobalSearch();navigateTo('freelancers')`}))},
+    {label:'Closers', items:closers.map(c=>({title:c.name, sub:c.whatsapp||c.email||'', action:`closeGlobalSearch();navigateTo('closers')`}))},
+    {label:'Delivery Partners', items:dps.map(d=>({title:d.name, sub:d.whatsapp||d.email||'', action:`closeGlobalSearch();navigateTo('dp')`}))},
+    {label:'Users', items:users.map(u=>({title:u.name, sub:u.loginId+' · '+(ROLE_LABELS[u.role]||u.role), action:`closeGlobalSearch();navigateTo('users')`}))}
   ].filter(g=>g.items.length);
   if(!groups.length){ box.innerHTML = '<div class="gs-empty">No matches found</div>'; box.classList.add('active'); return; }
   box.innerHTML = groups.map(g => `
