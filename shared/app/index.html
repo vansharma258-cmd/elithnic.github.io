@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELAS — Business OS</title>
+<script>
+  // Direct navigation to the SPA shell. This works under https:// AND file:// contexts.
+  // Firebase Hosting rewrites /app/* → /app/app-shell.html, so this file is only
+  // seen if the user explicitly hits /app/index.html via raw filesystem or a server
+  // that doesn't perform the rewrite.
+  (function(){
+    var here = window.location.pathname;
+    if(here === '/app/app-shell.html' || here.endsWith('/app-shell.html')) return;
+    var shell = '/app/app-shell.html';
+    if(window.location.protocol === 'file:'){
+      // For file:// usage, use absolute path from filesystem
+      var dir = here.replace(/\/index\.html?$/, '/').replace(/\/$/, '/');
+      shell = dir + 'app-shell.html';
+    }
+    window.location.replace(shell);
+  })();
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=/app/app-shell.html"></noscript>
+<link rel="canonical" href="/app/app-shell.html">
+</head>
+<body>
+<p style="font-family:sans-serif;color:#555;padding:40px;text-align:center;">
+  Redirecting to Business OS…<br>
+  <a href="/app/app-shell.html" style="color:#7c3aed;">Click here if not redirected</a>
+</p>
+</body>
+</html>

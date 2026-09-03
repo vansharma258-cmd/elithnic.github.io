@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ELAS — Business OS</title>
+<style>
+/* ===========================================================
+   ELAS App Shell — Inline CSS
+   =========================================================== */
+:root{
+  --bg:#0b0d10;--bg-elev:#13171c;--accent:#7c3aed;--accent-2:#a78bfa;
+  --cyan:#22d3ee;--magenta:#f472d6;--gold:#d4af37;--gold-2:#f6d878;
+  --accent-soft:rgba(124,58,237,0.14);--glass:rgba(20,24,38,0.72);
+  --glass-border:rgba(255,255,255,0.08);--glass-strong:rgba(20,24,38,0.85);
+  --text:#e8eaf0;--text-dim:#9aa3b8;--text-faint:#6b7280;
+  --green:#22c55e;--red:#f87171;--amber:#fbbf24;--blue:#38bdf8;
+  --radius-lg:18px;--radius-md:14px;--radius-sm:10px;
+  --shadow-glass:0 8px 32px rgba(0,0,0,0.5);--ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  font-size:14px;line-height:1.5;min-height:100vh;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;position:relative;font-weight:400;
+}
+.hidden{display:none !important;pointer-events:none !important;visibility:hidden !important;opacity:0 !important;z-index:-1 !important;}
+/* Force any loading screen sibling overlay to be below login when dismissed */
+#loadingScreen.dismissed{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;z-index:-1 !important;}
+
+/* LOADING SCREEN (premium branded) */
+#loadingScreen{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  z-index:9999;overflow:hidden;
+  transition:opacity .4s ease,visibility .4s;
+  background-image:
+    radial-gradient(circle at 20% 30%,rgba(124,58,237,0.20),transparent 50%),
+    radial-gradient(circle at 80% 70%,rgba(34,211,238,0.12),transparent 50%),
+    radial-gradient(circle at 50% 50%,rgba(212,175,55,0.06),transparent 60%);
+}
+#loadingScreen::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    linear-gradient(to right,rgba(255,255,255,0.02) 1px,transparent 1px),
+    linear-gradient(to bottom,rgba(255,255,255,0.02) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse at center,#000 30%,transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse at center,#000 30%,transparent 70%);
+  animation:lsGridShift 20s linear infinite;
+}
+@keyframes lsGridShift{to{background-position:48px 48px,48px 48px;}}
+.loading-wrap{text-align:center;position:relative;z-index:1;padding:24px;max-width:380px;width:100%;}
+
+/* ELAS brand mark */
+.ls-brand{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:32px;animation:lsBrandIn .6s var(--ease) both;}
+.ls-brand-mark{
+  width:64px;height:64px;border-radius:18px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:34px;font-weight:900;color:#fff;
+  background:linear-gradient(135deg,#7c3aed 0%,#a855f7 50%,#22d3ee 100%);
+  background-size:200% 200%;
+  box-shadow:0 8px 32px rgba(124,58,237,0.45),inset 0 1px 0 rgba(255,255,255,0.2);
+  animation:lsBrandPulse 3s ease-in-out infinite,lsBrandGrad 4s ease-in-out infinite;
+  position:relative;
+}
+.ls-brand-mark::after{
+  content:'';position:absolute;inset:-2px;border-radius:inherit;
+  background:linear-gradient(135deg,#7c3aed,#a855f7,#22d3ee,#7c3aed);
+  background-size:300% 300%;
+  z-index:-1;
+  animation:lsBrandGrad 4s ease-in-out infinite;
+  filter:blur(12px);opacity:0.6;
+}
+@keyframes lsBrandIn{from{opacity:0;transform:translateY(-8px) scale(0.95);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes lsBrandPulse{0%,100%{box-shadow:0 8px 32px rgba(124,58,237,0.45),inset 0 1px 0 rgba(255,255,255,0.2);}50%{box-shadow:0 12px 48px rgba(124,58,237,0.7),inset 0 1px 0 rgba(255,255,255,0.3);}}
+@keyframes lsBrandGrad{0%,100%{background-position:0% 50%;}50%{background-position:100% 50%;}}
+.ls-brand-text{
+  font-size:32px;font-weight:900;letter-spacing:-0.04em;
+  background:linear-gradient(120deg,#fff 0%,#f6d878 50%,#d4af37 100%);
+  -webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;
+}
+
+/* Premium multi-ring spinner */
+.ls-spinner-wrap{
+  position:relative;width:72px;height:72px;margin:0 auto 24px;
+  display:flex;align-items:center;justify-content:center;
+}
+.ls-spinner-ring{
+  position:absolute;inset:0;border-radius:50%;border:2px solid transparent;
+}
+.ls-spinner-ring-1{
+  border-top-color:#7c3aed;border-right-color:rgba(124,58,237,0.4);
+  animation:spin 1.4s cubic-bezier(.5,0,.5,1) infinite;
+}
+.ls-spinner-ring-2{
+  inset:6px;border-top-color:#22d3ee;border-left-color:rgba(34,211,238,0.4);
+  animation:spin 1.8s cubic-bezier(.5,0,.5,1) infinite reverse;
+}
+.ls-spinner-ring-3{
+  inset:12px;border-bottom-color:#a855f7;border-right-color:rgba(168,85,247,0.4);
+  animation:spin 2.2s cubic-bezier(.5,0,.5,1) infinite;
+}
+.ls-spinner-core{
+  position:relative;z-index:1;width:24px;height:24px;
+  display:flex;align-items:center;justify-content:center;
+  filter:drop-shadow(0 0 8px rgba(124,58,237,0.6));
+  animation:lsCoreFloat 2.4s ease-in-out infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes lsCoreFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+
+/* Status + progress */
+.loading-sub{font-size:13px;font-weight:600;color:var(--text-dim);margin:0 0 16px;letter-spacing:0.02em;}
+.ls-progress{
+  width:200px;max-width:100%;height:3px;border-radius:3px;
+  background:rgba(255,255,255,0.06);overflow:hidden;
+  margin:0 auto;position:relative;
+}
+.ls-progress-fill{
+  height:100%;width:30%;border-radius:3px;
+  background:linear-gradient(90deg,#7c3aed,#a855f7,#22d3ee);
+  background-size:200% 100%;
+  animation:lsProgress 1.6s ease-in-out infinite,lsProgressGrad 2s ease-in-out infinite;
+}
+@keyframes lsProgress{
+  0%{transform:translateX(-100%);}
+  100%{transform:translateX(400%);}
+}
+@keyframes lsProgressGrad{0%,100%{background-position:0% 50%;}50%{background-position:100% 50%;}}
+.loading-detail{font-size:11px;color:var(--text-faint);margin-top:8px;font-family:ui-monospace,monospace;min-height:14px;}
+
+/* Legacy class kept for any external refs */
+.loading-text{font-size:28px;font-weight:900;letter-spacing:-0.5px;margin:0;}
+.loading-spinner{width:40px;height:40px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7c3aed;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+
+/* AUTH */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;}
+.auth-card{width:100%;max-width:400px;padding:40px;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);backdrop-filter:blur(12px);}
+.auth-logo{font-size:22px;font-weight:900;letter-spacing:-0.5px;margin-bottom:24px;text-align:center;}
+.auth-card h2{font-size:20px;font-weight:700;margin:0 0 6px;}
+.auth-sub{font-size:13px;color:var(--text-dim);margin:0 0 24px;}
+.auth-card .field{margin-bottom:14px;}
+.auth-card label{display:block;font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px;}
+.auth-card input{width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .2s;}
+.auth-card input:focus{border-color:var(--accent);}
+.auth-card input::placeholder{color:var(--text-faint);}
+.err-box{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:var(--red);margin-bottom:14px;}
+.auth-note{font-size:12px;color:var(--text-dim);margin:14px 0 0;text-align:center;}
+.auth-recovery{text-align:center;margin-top:14px;}
+.auth-recovery a{font-size:12px;color:var(--text-faint);cursor:pointer;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-family:inherit;letter-spacing:-0.005em;white-space:nowrap;}
+.btn-primary{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(124,58,237,0.4);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--glass-border);}
+.btn-ghost:hover{background:rgba(255,255,255,0.08);}
+.btn-danger{background:rgba(248,113,113,0.15);color:var(--red);border:1px solid rgba(248,113,113,0.25);}
+.btn-block{width:100%;}
+.btn-sm{padding:7px 13px;font-size:12px;}
+
+/* MAIN LAYOUT */
+#appShell{display:flex;min-height:100vh;}
+
+/* SIDEBAR */
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:236px;background:var(--bg-elev);border-right:1px solid var(--glass-border);display:flex;flex-direction:column;z-index:45;transition:transform .25s ease;overflow-y:auto;}
+#sidebar.closed{transform:translateX(-236px);}
+.sidebar-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 12px;border-bottom:1px solid var(--glass-border);}
+.sidebar-brand{font-size:16px;font-weight:900;letter-spacing:-0.5px;}
+.sidebar-close{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px;line-height:1;border-radius:6px;display:none;}
+.sidebar-close:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;}
+.sidebar-group{margin-bottom:4px;}
+.sidebar-group-label{padding:6px 16px;font-size:10.5px;font-weight:700;color:var(--text-faint);letter-spacing:0.1em;text-transform:uppercase;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-dim);cursor:pointer;border:none;background:none;width:100%;text-align:left;border-radius:0;transition:background .15s,color .15s;font-family:inherit;}
+.sidebar-item:hover{background:rgba(255,255,255,0.04);color:var(--text);}
+.sidebar-item.active{background:rgba(124,58,237,0.12);color:var(--accent-2);border-right:2px solid var(--accent);}
+.sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(5px);z-index:9997;display:none;}
+.sidebar-overlay.open{display:block;}
+
+/* MAIN AREA */
+.main-area{flex:1;margin-left:236px;min-height:100vh;transition:margin-left .25s ease;}
+.topbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:12px;padding:14px 20px;background:rgba(11,13,16,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--glass-border);}
+.menu-toggle{background:rgba(20,24,38,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px;cursor:pointer;color:var(--text);display:none;align-items:center;justify-content:center;width:40px;height:40px;}
+.hbar{width:18px;height:2px;background:var(--text);border-radius:2px;position:relative;}
+.hbar::before,.hbar::after{content:'';position:absolute;left:0;width:100%;height:2px;background:var(--text);border-radius:2px;transition:transform .25s;}
+.hbar::before{top:-6px;}
+.hbar::after{bottom:-6px;}
+.topbar-title{font-size:15px;font-weight:700;}
+.topbar-sub{font-size:11.5px;color:var(--text-dim);}
+.topbar-right{margin-left:auto;display:flex;gap:8px;}
+.global-search-wrap{position:relative;flex:1;max-width:360px;}
+.global-search-input{width:100%;padding:8px 12px 8px 36px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;outline:none;transition:border-color .2s;}
+.global-search-input:focus{border-color:var(--accent);}
+.global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg-elev);border:1px solid var(--glass-border);border-radius:var(--radius-sm);max-height:300px;overflow-y:auto;display:none;z-index:200;}
+.global-search-results.active{display:block;}
+.search-result-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--glass-border);}
+.search-result-item:last-child{border-bottom:none;}
+.search-result-item:hover{background:rgba(255,255,255,0.04);}
+.main-content{padding:20px;padding-bottom:60px;}
+
+/* RESPONSIVE */
+@media(max-width:820px){
+  #sidebar{transform:translateX(-100%) !important;position:fixed !important;top:0;left:0;bottom:0;width:84% !important;max-width:340px !important;z-index:9998 !important;box-shadow:30px 0 60px rgba(0,0,0,0.7) !important;transition:transform .25s ease !important;}
+  #sidebar.open{transform:translateX(0) !important;}
+  .main-area{margin-left:0 !important;}
+  .sidebar-overlay{z-index:9997 !important;}
+  .sidebar-overlay.open{display:block !important;}
+  .sidebar-close{display:block;}
+  .menu-toggle{display:flex !important;}
+}
+@media(min-width:821px){.sidebar-overlay{display:none !important;}.menu-toggle{display:none !important;}}
+
+/* TOAST */
+#toastContainer{position:fixed;bottom:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px;}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius-sm);background:var(--glass-strong);border:1px solid var(--glass-border);font-size:13px;font-weight:500;box-shadow:var(--shadow-glass);animation:slideIn .25s var(--ease);backdrop-filter:blur(12px);min-width:240px;}
+.toast.t-success{border-color:rgba(34,197,94,0.3);}
+.toast.t-error{border-color:rgba(248,113,113,0.3);}
+.toast.t-info{border-color:rgba(124,58,237,0.3);}
+.t-ic{font-size:16px;}
+.t-success .t-ic{color:var(--green);}
+.t-error .t-ic{color:var(--red);}
+.t-info .t-ic{color:var(--accent);}
+.toast.out{animation:fadeOut .25s ease forwards;}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes fadeOut{to{transform:translateX(100%);opacity:0;}}
+
+/* MODAL — #modalRoot is hidden by default; only shows when openModal() adds content.
+   The empty state MUST NOT have display:flex / backdrop-filter, otherwise it
+   would cover the login form with a full-viewport blur. */
+#modalRoot{position:fixed;inset:0;z-index:5000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;}
+#modalRoot:not(:empty){display:flex;}
+.modal-box{background:var(--bg-elev);border:1px solid var(--glass-border);border-radius:var(--radius-lg);width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-glass);}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--glass-border);position:sticky;top:0;background:var(--bg-elev);z-index:1;}
+.modal-title{font-size:16px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;line-height:1;border-radius:6px;}
+.modal-close:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+.modal-body{padding:20px 24px;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--glass-border);position:sticky;bottom:0;background:var(--bg-elev);}
+
+/* FORM */
+.form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px;}
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .2s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+.field input::placeholder,.field textarea::placeholder{color:var(--text-faint);}
+.field select option{background:var(--bg-elev);}
+textarea{resize:vertical;min-height:80px;}
+
+/* PANELS */
+.panel{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px;}
+.panel:hover{border-color:rgba(139,92,246,0.22);}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+.panel-title{font-size:15px;font-weight:700;}
+.panel-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.sm{font-size:11.5px;color:var(--text-dim);font-weight:400;}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th,.data-table td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--glass-border);white-space:nowrap;}
+.data-table th{font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:0.05em;text-transform:uppercase;}
+.data-table tbody tr:hover{background:rgba(255,255,255,0.02);}
+.cell-strong{font-weight:600;}
+.cell-dim{color:var(--text-dim);font-size:12.5px;}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:10.5px;font-weight:700;letter-spacing:0.3px;}
+.badge-new{background:rgba(56,189,248,0.15);color:#7dd3fc;}
+.badge-contacted{background:rgba(124,58,237,0.15);color:#c4b5fd;}
+.badge-followup{background:rgba(251,191,36,0.15);color:#fde68a;}
+.badge-negotiation{background:rgba(168,85,247,0.15);color:#d8b4fe;}
+.badge-closed,.badge-verified{background:rgba(34,197,94,0.15);color:#86efac;}
+.badge-lost{background:rgba(248,113,113,0.15);color:#fca5a5;}
+.badge-pending{background:rgba(251,191,36,0.15);color:#fde68a;}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:16px;}
+.stat-val{font-size:24px;font-weight:800;letter-spacing:-0.5px;}
+.stat-label{font-size:11.5px;color:var(--text-dim);margin-top:3px;font-weight:600;}
+
+/* SEARCH / TOOLBAR */
+.search-box{position:relative;}
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+.search-box input{width:100%;padding:7px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;outline:none;}
+.filter-select{padding:7px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:40px 20px;}
+.empty-state .ic{font-size:36px;margin-bottom:12px;opacity:0.3;}
+.empty-state .s{font-size:14px;color:var(--text-dim);}
+
+/* VIEW SECTIONS */
+.view-section{display:none;}
+.view-section.active{display:block;}
+
+/* NOTIFICATION PANEL */
+.notif-panel{position:fixed;top:60px;right:20px;width:360px;max-width:90vw;background:var(--bg-elev);border:1px solid var(--glass-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-glass);z-index:200;max-height:400px;overflow-y:auto;display:none;}
+.notif-panel.show{display:block;}
+.notif-item{padding:12px 16px;border-bottom:1px solid var(--glass-border);font-size:13px;cursor:pointer;}
+.notif-item:hover{background:rgba(255,255,255,0.03);}
+.notif-time{font-size:11px;color:var(--text-faint);margin-top:4px;}
+
+/* ATTRIBUTION */
+.attribution-chain{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:var(--radius-sm);font-size:12.5px;margin:8px 0;}
+.attribution-node{padding:4px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+.attribution-closer{background:rgba(56,189,248,0.12);color:#7dd3fc;}
+.attribution-pm{background:rgba(168,85,247,0.12);color:#d8b4fe;}
+.attribution-sm{background:rgba(251,191,36,0.12);color:#fde68a;}
+
+/* MOBILE */
+@media(max-width:768px){
+  .form-grid2{grid-template-columns:1fr;}
+  .stat-grid{grid-template-columns:repeat(2,1fr);}
+  .modal-box{max-width:100%;border-radius:var(--radius-sm);}
+  .main-content{padding:16px 14px 60px;}
+  .topbar{padding:12px 14px;}
+  .global-search-wrap{max-width:180px;}
+  .notif-panel{right:10px;left:10px;width:auto;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN (premium branded) -->
+<div id="loadingScreen">
+  <div class="loading-wrap">
+    <!-- ELAS brand mark -->
+    <div class="ls-brand">
+      <div class="ls-brand-mark">EL</div>
+      <div class="ls-brand-text">ELAS</div>
+    </div>
+    <!-- Premium spinner -->
+    <div class="ls-spinner-wrap">
+      <div class="ls-spinner-ring ls-spinner-ring-1"></div>
+      <div class="ls-spinner-ring ls-spinner-ring-2"></div>
+      <div class="ls-spinner-ring ls-spinner-ring-3"></div>
+      <div class="ls-spinner-core">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M2 17l10 5 10-5" stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12l10 5 10-5" stroke="#7c3aed" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <p class="loading-sub" id="loadingStatus">Initializing operations platform…</p>
+    <div class="ls-progress"><div class="ls-progress-fill" id="lsProgressFill"></div></div>
+    <p class="loading-detail" id="loadingDetail" style="font-size:11px;color:var(--text-faint);margin-top:8px;"></p>
+  </div>
+</div>
+
+<!-- LOGIN SCREEN (visible by default so the user always sees a login form
+     even if JS errors prevent bootstrap from running. bootstrap() will hide
+     loadingScreen and adjust as needed.) -->
+<div class="auth-wrap" id="loginScreen">
+  <div class="auth-card">
+    <div class="auth-logo">ELAS</div>
+    <h2>Sign In to ELAS</h2>
+    <p class="auth-sub">Enter your credentials to access the operations platform</p>
+    <div id="loginErr" class="err-box" style="display:none;"></div>
+    <div class="field"><label>Username</label>
+      <input type="text" id="loginUsername" placeholder="e.g. ADMIN" autocomplete="username">
+    </div>
+    <div class="field"><label>Password</label>
+      <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="loginBtn">Sign In</button>
+    <p class="auth-note">Demo: admin / elithnic123</p>
+    <div class="auth-recovery"><a id="showRecovery">Forgot password? Use recovery key</a></div>
+  </div>
+</div>
+
+<!-- FORGOT SCREEN -->
+<div class="auth-wrap hidden" id="forgotScreen" style="display:none;">
+  <div class="auth-card">
+    <h2>Recovery Key</h2>
+    <p>Enter your recovery key to reset the admin password.</p>
+    <div id="forgotErr" class="err-box" style="display:none;"></div>
+    <div class="field"><label>Recovery Key</label>
+      <input type="text" id="recoveryInput" placeholder="ELI-XXXX-XXXX-XXXX">
+    </div>
+    <div class="field"><label>New Password</label>
+      <input type="password" id="forgotNewPass" placeholder="Min 6 characters">
+    </div>
+    <button class="btn btn-primary btn-block" id="forgotResetBtn">Reset Password</button>
+    <p class="auth-note"><a id="backToLogin">← Back to login</a></p>
+  </div>
+</div>
+
+<!-- MAIN APP SHELL -->
+<div id="appShell" class="hidden" style="display:none;">
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-brand">ELAS</div>
+      <button class="sidebar-close" id="sidebarCloseBtn">✕</button>
+    </div>
+    <div id="sidebarNav" class="sidebar-nav"></div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebarBackdrop"></div>
+
+  <div class="main-area">
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle"><span class="hbar"></span></button>
+      <div>
+        <div class="topbar-title" id="topbarTitle">Dashboard</div>
+        <div class="topbar-sub" id="topbarSub"></div>
+      </div>
+      <div class="global-search-wrap">
+        <input type="text" class="global-search-input" id="globalSearchInput" placeholder="Search…">
+        <div class="global-search-results" id="globalSearchResults"></div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-sm" id="notifBtn">🔔</button>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn">Sign Out</button>
+      </div>
+    </header>
+    <div id="notifPanel" class="notif-panel"></div>
+    <main class="main-content" id="mainContent">
+      <section class="view-section" id="view-dashboard"></section>
+      <section class="view-section" id="view-leads"></section>
+      <section class="view-section" id="view-closers"></section>
+      <section class="view-section" id="view-clients"></section>
+      <section class="view-section" id="view-projects"></section>
+      <section class="view-section" id="view-products"></section>
+      <section class="view-section" id="view-productSales"></section>
+      <section class="view-section" id="view-kanban"></section>
+      <section class="view-section" id="view-tickets"></section>
+      <section class="view-section" id="view-activity"></section>
+      <section class="view-section" id="view-settings"></section>
+      <section class="view-section" id="view-users"></section>
+      <section class="view-section" id="view-managers"></section>
+      <section class="view-section" id="view-senior-managers"></section>
+      <section class="view-section" id="view-sales"></section>
+      <section class="view-section" id="view-commission-ledger"></section>
+      <section class="view-section" id="view-client-requests"></section>
+    </main>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastContainer"></div>
+
+<!-- Firebase SDK (load once, before all other scripts) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+<!-- Shared modules
+     IMPORTANT: critical auth functions (sha256, ROLE_LABELS, session
+     helpers) are INLINED immediately below. Loading them via
+     <script src="/shared/auth.js"> fails under file:// because Chrome
+     resolves /shared/ to the filesystem root (file:///shared/), not
+     the project directory (file:///home/vansharma258/shared/), so the
+     file is silently not found and bootstrap throws
+     "sha256 is not defined". The inline block uses only Web Crypto +
+     localStorage and is identical to the implementation in
+     /shared/auth.js (kept in sync). Non-critical modules
+     (config.js, utils.js, saleId.js) are loaded as relative paths
+     and tolerate silent failure under file:// (their functions are
+     not on the bootstrap critical path). -->
+
+<!-- ============== INLINE AUTH (mirrors /shared/auth.js) ============== -->
+<script>
+(function(){
+  /* ---- Core crypto ---- */
+  function sha256(text){
+    var enc = new TextEncoder().encode(text);
+    return crypto.subtle.digest('SHA-256', enc).then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+    });
+  }
+  /* ---- Session helpers ---- */
+  var SESSION_KEY = 'elithnic_session_v1';
+  function isLoggedIn(){
+    try{ return !!(sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY)); }
+    catch(e){ return false; }
+  }
+  function getSessionUserId(){
+    try{ return sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY) || null; }
+    catch(e){ return null; }
+  }
+  function setLoggedIn(userId, remember){
+    if(remember) localStorage.setItem(SESSION_KEY, userId);
+    sessionStorage.setItem(SESSION_KEY, userId);
+  }
+  function clearLoggedIn(){
+    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
+  }
+  /* ---- Role labels ---- */
+  var ROLE_LABELS = {
+    admin:'Admin',closer:'Closer',dp:'Delivery Partner',freelancer:'Freelancer',
+    client:'Client',dsacloser:'DSA Closer',loanmanager:'Loan Manager',
+    productmanager:'Product Manager',servicemanager:'Service Manager',manager:'Manager',
+    seniorManager:'Senior Manager'
+  };
+  /* ---- Place on window immediately so any script can use them ---- */
+  window.sha256 = sha256;
+  window.SESSION_KEY = SESSION_KEY;
+  window.isLoggedIn = isLoggedIn;
+  window.getSessionUserId = getSessionUserId;
+  window.setLoggedIn = setLoggedIn;
+  window.clearLoggedIn = clearLoggedIn;
+  window.ROLE_LABELS = ROLE_LABELS;
+  /* ---- Web Crypto secure-context check (DOM must be ready) ---- */
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    // Defer DOM update until body elements exist
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function(){
+        var el = document.getElementById('loadingStatus');
+        if (el) el.textContent = 'Insecure context — Web Crypto unavailable';
+      });
+    } else {
+      var el = document.getElementById('loadingStatus');
+      if (el) el.textContent = 'Insecure context — Web Crypto unavailable';
+    }
+  }
+})();
+</script>
+
+<script src="../shared/config.js"></script>
+<script src="../shared/utils.js"></script>
+<script src="../shared/saleId.js"></script>
+
+<!-- App JS (inlined below) -->
+<script>
+/* ===========================================================
+   ELAS — App Core (/app/app.js)
+   =========================================================== */
+
+/* ---------- Firebase Init ----------
+   Always block Firestore when running from file://.
+   Rationale: the Firebase CDN scripts load fine (gstatic.com is accessible
+   from file://), so firebase.initializeApp() succeeds and the SDK starts.
+   But all Firestore gRPC-Web API calls to firestore.googleapis.com are
+   blocked by CORS from file:// — the SDK hangs on its initial connection
+   for many seconds before failing. Setting FIREBASE_AVAILABLE=false
+   here skips Firestore entirely, uses the local-cache fast path, and
+   the login screen appears in ~10–50ms. HTTPS origin continues normally.
+   Rationale for no else-if: explicitly checking file: protocol is
+   intentional and works in all browsers that support this sandbox. */
+const firebaseConfig = {
+  apiKey: "AIzaSyCRA-KovecQr9ZS3H3Swr4_1qzIzS7MHl4",
+  authDomain: "elithnic.firebaseapp.com",
+  projectId: "elithnic",
+  storageBucket: "elithnic.firebasestorage.app",
+  messagingSenderId: "843612469239",
+  appId: "1:843612469239:web:b5fd79945aa9093b64e0f2"
+};
+
+let app, fsdb, FIREBASE_AVAILABLE = false;
+if (window.location.protocol === 'file:') {
+  console.info('[Firebase] file:// context detected — using offline mode');
+} else {
+  try {
+    app = firebase.initializeApp(firebaseConfig);
+    fsdb = firebase.firestore();
+    FIREBASE_AVAILABLE = true;
+    fsdb.enablePersistence({ synchronizeTabs: true }).catch(err => {
+      console.warn('[Firestore] Offline persistence unavailable:', err.code);
+    });
+  } catch(err) {
+    console.error('[Firebase] Init failed:', err.message);
+    FIREBASE_AVAILABLE = false;
+  }
+}
+
+/* ---------- State ---------- */
+let CURRENT_USER = null;
+let DB = null;
+let FS_UNSUBSCRIBERS = [];
+
+/* ---------- Collections ---------- */
+const FS_COLLECTIONS = [
+  'users','leads','closers','deliveryPartners','freelancers','clients','projects',
+  'activities','notifications','products','productSales','tickets','dsaClosers',
+  'loanDeals','perfVideos','legalDocuments','productDeals','walletPayouts',
+  'withdrawalRequests','saasSales','managers','closerAssignments','clientRequests',
+  'payoutProfiles','sales','payments','commissionLedger'
+];
+const FS_SYSTEM_DOC = FIREBASE_AVAILABLE ? fsdb.collection('system').doc('config') : null;
+
+/* ---------- Local DB Helpers ---------- */
+function defaultDB(){
+  return {
+    auth:{recoveryKeyHash:null},
+    users:[],leads:[],closers:[],deliveryPartners:[],freelancers:[],
+    clients:[],projects:[],activities:[],notifications:[],
+    products:[],productSales:[],tickets:[],dsaClosers:[],
+    loanDeals:[],perfVideos:[],legalDocuments:[],productDeals:[],
+    walletPayouts:[],withdrawalRequests:[],saasSales:[],
+    managers:[],closerAssignments:[],clientRequests:[],
+    payoutProfiles:[],sales:[],payments:[],commissionLedger:[],
+    counters:{lead:0,closer:0,dp:0,freelancer:0,client:0,project:1000,user:0,saleId:1000},
+    meta:{createdAt:new Date().toISOString()}
+  };
+}
+function saveLocalCache(){
+  if(!DB) return;
+  try { localStorage.setItem('elithnic_db_v1', JSON.stringify(DB)); } catch(e) {}
+}
+function loadLocalCache(){
+  try {
+    const raw = localStorage.getItem('elithnic_db_v1');
+    DB = raw ? JSON.parse(raw) : defaultDB();
+  } catch(e) { DB = defaultDB(); }
+}
+/* Sync, throwing-free check for whether localStorage is usable.
+   On file://, Chrome throws a SecurityError when accessing localStorage
+   from the page. We don't care about persistent cache there — we just
+   need to make sure login works in-memory. */
+function localStorageWorks(){
+  try {
+    var k='__elas_test__';
+    localStorage.setItem(k,'1');
+    localStorage.removeItem(k);
+    return true;
+  } catch(e) { return false; }
+}
+
+/* ---------- Data Access ---------- */
+function getAll(coll){ return (DB[coll] && Array.isArray(DB[coll])) ? DB[coll] : []; }
+function getById(coll, id){ return getAll(coll).find(x => x.id === id); }
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+async function upsert(coll, record){
+  if(FIREBASE_AVAILABLE && FS_COLLECTIONS.includes(coll)){
+    try { await fsdb.collection(coll).doc(record.id).set(record); } catch(e) { console.error('[Firestore] upsert failed:', e); }
+  }
+  DB[coll] = DB[coll] || [];
+  const idx = DB[coll].findIndex(x => x.id === record.id);
+  if(idx >= 0) DB[coll][idx] = record; else DB[coll].push(record);
+  saveLocalCache();
+}
+
+/* ---------- One-time local seed (admin / elithnic123) ----------
+   This is a no-op if the admin user already exists.
+   Allows the Business OS to be usable on a brand-new deployment
+   before the user has manually provisioned the admin account.
+   The Firestore write is fire-and-forget with a 3s timeout — it
+   MUST NOT block the login screen from appearing. */
+async function ensureAdminSeed(){
+  // Guard: sha256() must be available (Web Crypto requires a secure context)
+  if(typeof sha256 !== 'function'){
+    console.error('[Seed] sha256 not available — admin cannot be seeded');
+    return;
+  }
+  const adminHash = await sha256('elithnic123');
+  const exists = (DB.users||[]).some(u => u.loginId === 'ADMIN' || u.loginId === 'admin');
+  if(exists) return;
+  const seedUser = {
+    id: 'usr_admin_seed',
+    name: 'Admin',
+    loginId: 'ADMIN',
+    role: 'admin',
+    status: 'active',
+    passwordHash: adminHash,
+    email: 'admin@elithnic.local',
+    createdDate: new Date().toISOString()
+  };
+  DB.users = DB.users || [];
+  DB.users.push(seedUser);
+  saveLocalCache();
+  // Fire-and-forget Firestore write — do not await it.
+  if(FIREBASE_AVAILABLE){
+    const seedWriteTimeout = new Promise((resolve) => {
+      setTimeout(() => {
+        console.warn('[Seed] Firestore seed write timed out (3s) — admin seeded locally only');
+        resolve();
+      }, 3000);
+    });
+    const seedWrite = (async () => {
+      try {
+        const ref = fsdb.collection('users').doc(seedUser.id);
+        const snap = await ref.get();
+        if(!snap.exists) await ref.set(seedUser);
+      } catch(e){
+        console.warn('[Seed] Could not write admin to Firestore:', e.code || e.message);
+      }
+    })();
+    await Promise.race([seedWrite, seedWriteTimeout]);
+  }
+}
+
+/* ---------- Load DB from Firestore ----------
+   Wrapped in a hard timeout. If Firestore is unreachable (e.g. file://
+   context, offline, blocked by CORS), fall back to local cache instead
+   of hanging forever. The 6s ceiling keeps bootstrap well under the
+   8s safety timer that hides the loading screen. */
+async function loadDB(){
+  console.log('[BOOT] loadDB START — FIREBASE_AVAILABLE=' + FIREBASE_AVAILABLE);
+  if(!FIREBASE_AVAILABLE){
+    setLoadingStatus('Initializing operations platform…', 'offline-mode');
+    loadLocalCache();
+    return DB;
+  }
+  setLoadingStatus('Connecting to workspace…', 'firestore');
+  const HARD_TIMEOUT_MS = 6000;
+  const hardTimeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Firestore load timeout (6s)')), HARD_TIMEOUT_MS);
+  });
+  const firestoreLoad = (async () => {
+    const results = await Promise.all(FS_COLLECTIONS.map(c => fsdb.collection(c).get()));
+    const fresh = defaultDB();
+    FS_COLLECTIONS.forEach((c, i) => { fresh[c] = results[i].docs.map(d => d.data()); });
+    if(FS_SYSTEM_DOC){
+      const sysSnap = await FS_SYSTEM_DOC.get();
+      if(sysSnap.exists){
+        const sys = sysSnap.data();
+        if(sys.auth) fresh.auth = sys.auth;
+        if(sys.counters) fresh.counters = Object.assign(fresh.counters || {}, sys.counters);
+      }
+    }
+    return fresh;
+  })();
+  try {
+    const fresh = await Promise.race([firestoreLoad, hardTimeout]);
+    DB = fresh;
+    saveLocalCache();
+    setLoadingStatus('Syncing workspace…', 'loaded');
+    console.log('[Firestore] Loaded', FS_COLLECTIONS.length, 'collections');
+  } catch(err){
+    setLoadingStatus('Preparing workspace…', 'fallback-cache');
+    console.warn('[Firestore] Load failed or timed out:', err.message);
+    loadLocalCache();
+  }
+  setLoadingStatus('Preparing sign in…', 'auth');
+  await ensureAdminSeed();
+  return DB;
+}
+
+/* ---------- Counter ---------- */
+async function nextCounter(name){
+  if(!FIREBASE_AVAILABLE){
+    DB.counters[name] = (DB.counters[name]||0) + 1;
+    saveLocalCache(); return DB.counters[name];
+  }
+  const newValue = await fsdb.runTransaction(async (tx) => {
+    const snap = await tx.get(FS_SYSTEM_DOC);
+    const counters = (snap.exists && snap.data().counters) ? snap.data().counters : DB.counters;
+    const next = (counters[name]||0) + 1;
+    counters[name] = next;
+    tx.set(FS_SYSTEM_DOC, {counters}, {merge:true});
+    return next;
+  });
+  DB.counters[name] = newValue;
+  saveLocalCache();
+  return newValue;
+}
+
+/* ---------- Real-time Sync ---------- */
+const debouncedRender = (() => {
+  let t;
+  return (fn, ms) => { clearTimeout(t); t = setTimeout(() => fn(), ms); };
+})();
+let renderTimer = null;
+function scheduleRender(){
+  if(!CURRENT_USER) return;
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => renderAll(), 200);
+}
+function startRealtimeSync(){
+  if(!FIREBASE_AVAILABLE || FS_UNSUBSCRIBERS.length) return;
+  FS_COLLECTIONS.forEach(c => {
+    const unsub = fsdb.collection(c).onSnapshot(snap => {
+      DB[c] = snap.docs.map(d => d.data());
+      saveLocalCache();
+      scheduleRender();
+    }, err => console.error('[Firestore] Sync error on', c, err.message));
+    FS_UNSUBSCRIBERS.push(unsub);
+  });
+  console.log('[Firestore] Realtime listeners attached');
+}
+function stopRealtimeSync(){
+  FS_UNSUBSCRIBERS.forEach(u => u());
+  FS_UNSUBSCRIBERS = [];
+  clearTimeout(renderTimer);
+}
+
+/* ---------- Session ---------- */
+function resolveCurrentUser(){
+  const id = getSessionUserId();
+  if(!id) return null;
+  const u = getById('users', id);
+  if(!u || u.status !== 'active') return null;
+  return u;
+}
+
+/* ---------- Screen Navigation ---------- */
+function showScreen(id){
+  const screens = ['loadingScreen','loginScreen','forgotScreen','appShell'];
+  screens.forEach(s => {
+    const el = document.getElementById(s);
+    if(el){ el.classList.add('hidden'); el.style.display = 'none'; }
+  });
+  const target = document.getElementById(id);
+  if(target){ target.classList.remove('hidden'); target.style.display = id === 'appShell' ? 'flex' : 'flex'; }
+  if(id !== 'appShell'){
+    document.querySelectorAll('.view-section.active').forEach(s => s.classList.remove('active'));
+  }
+}
+function showApp(){
+  showScreen('appShell');
+  applyRoleUI();
+  // CRITICAL: navigateTo must run BEFORE renderAll so that the active
+  // view-section has the .active class — otherwise renderAll() sees
+  // no active view and exits early, leaving the main area blank.
+  navigateTo('dashboard');
+  renderAll();
+  startRealtimeSync();
+}
+
+/* ---------- Role UI ---------- */
+function applyRoleUI(){
+  const u = CURRENT_USER;
+  document.getElementById('topbarTitle').textContent = u ? u.name : 'ELAS';
+  document.getElementById('topbarSub').textContent = u ? (ROLE_LABELS[u.role] || u.role) + ' Workspace' : '';
+  renderSidebarNav(u ? u.role : 'guest');
+}
+
+/* ---------- Sidebar Nav ---------- */
+const NAV_CONFIG = {
+  admin:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'},{view:'kanban',label:'Pipeline'}]},
+    {group:'Sales', items:[{view:'leads',label:'Leads'},{view:'closers',label:'Closers'},{view:'sales',label:'Sales'}]},
+    {group:'Delivery', items:[{view:'projects',label:'Projects'},{view:'clients',label:'Clients'}]},
+    {group:'Marketplace', items:[{view:'products',label:'Products'},{view:'productSales',label:'Product Sales'}]},
+    {group:'Finance', items:[{view:'users',label:'Users'},{view:'commission-ledger',label:'Commission'}]},
+    {group:'Operations', items:[{view:'senior-managers',label:'Senior Managers'},{view:'managers',label:'Managers'},{view:'client-requests',label:'Client Requests'}]},
+    {group:'Support', items:[{view:'tickets',label:'Tickets'},{view:'activity',label:'Activity Log'},{view:'settings',label:'Settings'}]}
+  ],
+  productmanager:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'}]},
+    {group:'Products', items:[{view:'products',label:'My Products'},{view:'sales',label:'Sales'}]},
+    {group:'Team', items:[{view:'closers',label:'Closers'}]},
+    {group:'System', items:[{view:'settings',label:'Settings'}]}
+  ],
+  closer:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'}]},
+    {group:'Sales', items:[{view:'leads',label:'My Leads'},{view:'sales',label:'My Sales'}]},
+    {group:'System', items:[{view:'settings',label:'Settings'}]}
+  ],
+  manager:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'}]},
+    {group:'Team', items:[{view:'closers',label:'Closers'}]},
+    {group:'System', items:[{view:'settings',label:'Settings'}]}
+  ],
+  seniorManager:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'}]},
+    {group:'Team', items:[{view:'managers',label:'Managers'},{view:'closers',label:'Closers'}]},
+    {group:'System', items:[{view:'settings',label:'Settings'}]}
+  ],
+  client:[
+    {group:'Overview', items:[{view:'dashboard',label:'Dashboard'}]},
+    {group:'System', items:[{view:'settings',label:'Settings'}]}
+  ]
+};
+function renderSidebarNav(role){
+  const nav = document.getElementById('sidebarNav');
+  const cfg = NAV_CONFIG[role] || NAV_CONFIG.closer;
+  nav.innerHTML = cfg.map(g => `
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">${g.group}</div>
+      ${g.items.map(item => `<button class="sidebar-item" data-view="${item.view}">${item.label}</button>`).join('')}
+    </div>
+  `).join('');
+  nav.querySelectorAll('.sidebar-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigateTo(btn.dataset.view);
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarBackdrop').classList.remove('open');
+    });
+  });
+}
+
+/* ---------- Navigate ---------- */
+function navigateTo(view){
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+  const btn = document.querySelector(`.sidebar-item[data-view="${view}"]`);
+  if(btn) btn.classList.add('active');
+  const section = document.getElementById('view-' + view);
+  if(section) section.classList.add('active');
+  const titles = {
+    dashboard:'Dashboard',kanban:'Pipeline',leads:'Leads',closers:'Closers',
+    clients:'Clients',projects:'Projects',products:'Products',
+    productSales:'Product Sales',tickets:'Tickets',activity:'Activity Log',
+    settings:'Settings',sales:'Sales',managers:'Managers','senior-managers':'Senior Managers',users:'Users',
+    'commission-ledger':'Commission Ledger','client-requests':'Client Requests'
+  };
+  document.getElementById('topbarTitle').textContent = titles[view] || view;
+  // Render the newly-active view. renderAll checks .active class so the
+  // view must be active before this call.
+  renderAll();
+}
+
+/* ---------- Render All ---------- */
+function renderAll(){
+  const view = document.querySelector('.view-section.active');
+  if(!view) return;
+  const id = view.id.replace('view-','');
+  const r = {
+    dashboard: renderDashboard, leads: renderLeads, closers: renderClosers,
+    clients: renderClients, projects: renderProjects, products: renderProducts,
+    productSales: renderProductSales, sales: renderSales, managers: renderManagers,
+    users: renderUsers, tickets: renderTickets, activity: renderActivity,
+    settings: renderSettings, kanban: renderKanban,
+    'commission-ledger': renderCommissionLedger,
+    'client-requests': renderClientRequests,
+    'senior-managers': renderSeniorManagers
+  };
+  if(r[id]) r[id]();
+}
+
+/* ---------- Dashboard ---------- */
+function renderDashboard(){
+  const section = document.getElementById('view-dashboard');
+  const u = CURRENT_USER;
+  if(!u) return;
+  section.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Welcome back, ${escapeHtml(u.name)}</div></div>
+      <div class="stat-grid">
+        ${u.role==='admin' ? `
+          <div class="stat-card"><div class="stat-val">${getAll('leads').length}</div><div class="stat-label">Leads</div></div>
+          <div class="stat-card"><div class="stat-val">${getAll('closers').length}</div><div class="stat-label">Closers</div></div>
+          <div class="stat-card"><div class="stat-val">${getAll('clients').length}</div><div class="stat-label">Clients</div></div>
+          <div class="stat-card"><div class="stat-val">${getAll('projects').length}</div><div class="stat-label">Projects</div></div>
+          <div class="stat-card"><div class="stat-val">${getAll('products').length}</div><div class="stat-label">Products</div></div>
+          <div class="stat-card"><div class="stat-val" style="color:var(--green)">${(DB.sales||[]).filter(s=>s.status==='verified').length}</div><div class="stat-label">Verified Sales</div></div>
+        ` : `
+          <div class="stat-card"><div class="stat-val">${(DB.sales||[]).length}</div><div class="stat-label">My Sales</div></div>
+        `}
+      </div>
+    </div>
+    ${u.role==='admin' ? `
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Recent Activity</div></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Type</th><th>Message</th><th>Time</th></tr></thead><tbody>
+        ${getAll('activities').slice(0,10).map(a => `<tr><td class="cell-dim">${escapeHtml(a.type||'')}</td><td>${escapeHtml(a.message||'')}</td><td class="cell-dim">${fmtDateTime(a.timestamp)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>` : ''}
+  `;
+}
+
+/* ---------- Table Renderers ---------- */
+function makeTable(headers, rows, emptyMsg){
+  if(!rows.length) return `<div class="empty-state"><div class="ic">📋</div><div class="s">${emptyMsg}</div></div>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+/* ---------- Leads ---------- */
+function renderLeads(){
+  const section = document.getElementById('view-leads');
+  const leads = getAll('leads').slice().sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0));
+  const rows = leads.map(l => `<tr><td class="cell-strong">${escapeHtml(l.name||'')}</td><td class="cell-dim">${escapeHtml(l.email||'')}</td><td class="cell-dim">${escapeHtml(l.phone||'')}</td><td class="cell-dim">${escapeHtml(l.source||'')}</td><td><span class="badge badge-${(l.status||'new').toLowerCase().replace(' ','-')}">${escapeHtml(l.status||'')}</span></td><td class="cell-dim">${fmtDate(l.createdDate)}</td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Leads <span class="sm">${leads.length}</span></div>${CURRENT_USER.role==='admin'?`<button class="btn btn-primary btn-sm" id="addLeadBtn">+ Add Lead</button>`:''}</div>${makeTable(['Name','Email','Phone','Source','Status','Created'],rows,'No leads yet')}</div>`;
+  document.getElementById('addLeadBtn')?.addEventListener('click', openLeadModal);
+}
+
+/* ---------- Closers ---------- */
+function renderClosers(){
+  const section = document.getElementById('view-closers');
+  // Filter closers for seniorManager (show closers of their PMs only)
+  let closers = getAll('closers');
+  if(CURRENT_USER.role === 'seniorManager'){
+    const myPMIds = getAll('managers').filter(m => m.seniorManagerId === CURRENT_USER.entityId).map(m => m.id);
+    closers = closers.filter(c => c.assignedManagerId && myPMIds.includes(c.assignedManagerId));
+  }
+  const rows = closers.map(c => { const mgr = c.managerId ? getById('managers',c.managerId) : null; return `<tr><td class="cell-strong">${escapeHtml(c.name||'')}</td><td class="cell-dim">${escapeHtml(c.email||'')}</td><td class="cell-dim">${escapeHtml(c.phone||'')}</td><td class="cell-dim">${escapeHtml(mgr?mgr.name:'(none)')}</td><td><span class="badge badge-${c.status==='active'?'new':'closed'}">${escapeHtml(c.status||'')}</span></td></tr>`; });
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Closers <span class="sm">${closers.length}</span></div>${CURRENT_USER.role==='admin'?`<button class="btn btn-primary btn-sm" id="addCloserBtn">+ Add Closer</button>`:''}</div>${makeTable(['Name','Email','Phone','Manager','Status'],rows,'No closers yet')}</div>`;
+  document.getElementById('addCloserBtn')?.addEventListener('click', openCloserModal);
+}
+
+/* ---------- Clients ---------- */
+function renderClients(){
+  const section = document.getElementById('view-clients');
+  const clients = getAll('clients').slice().sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0));
+  const rows = clients.map(c => `<tr><td class="cell-strong">${escapeHtml(c.name||'')}</td><td class="cell-dim">${escapeHtml(c.email||'')}</td><td class="cell-dim">${escapeHtml(c.phone||'')}</td><td class="cell-dim">${escapeHtml(c.company||'')}</td><td class="cell-dim">${fmtDate(c.createdDate)}</td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Clients <span class="sm">${clients.length}</span></div>${CURRENT_USER.role==='admin'?`<button class="btn btn-primary btn-sm" id="addClientBtn">+ Add Client</button>`:''}</div>${makeTable(['Name','Email','Phone','Company','Created'],rows,'No clients yet')}</div>`;
+  document.getElementById('addClientBtn')?.addEventListener('click', openClientModal);
+}
+
+/* ---------- Projects ---------- */
+function renderProjects(){
+  const section = document.getElementById('view-projects');
+  const projects = getAll('projects').slice().sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0));
+  const rows = projects.map(p => { const cl = getById('clients',p.clientId); return `<tr><td class="cell-strong">${escapeHtml(p.name||'')}</td><td class="cell-dim">${escapeHtml(cl?cl.name:'')}</td><td><span class="badge badge-${(p.status||'').toLowerCase()}">${escapeHtml(p.status||'')}</span></td><td>${fmtMoney(p.amount)}</td><td class="cell-dim">${fmtDate(p.createdDate)}</td></tr>`; });
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Projects <span class="sm">${projects.length}</span></div>${CURRENT_USER.role==='admin'?`<button class="btn btn-primary btn-sm" id="addProjectBtn">+ New Project</button>`:''}</div>${makeTable(['Name','Client','Status','Amount','Created'],rows,'No projects yet')}</div>`;
+  document.getElementById('addProjectBtn')?.addEventListener('click', openProjectModal);
+}
+
+/* ---------- Products ---------- */
+function renderProducts(){
+  const section = document.getElementById('view-products');
+  const products = getAll('products').slice().sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0));
+  const rows = products.map(p => `<tr><td class="cell-strong">${escapeHtml(p.name||'')}</td><td class="cell-dim">${escapeHtml(p.category||'')}</td><td>${fmtMoney(p.price)}</td><td><span class="badge badge-${p.status==='Active'?'closed':'new'}">${escapeHtml(p.status||'')}</span></td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Products <span class="sm">${products.length}</span></div>${CURRENT_USER.role==='admin'||CURRENT_USER.role==='productmanager'?`<button class="btn btn-primary btn-sm" id="addProductBtn">+ Add Product</button>`:''}</div>${makeTable(['Name','Category','Price','Status'],rows,'No products yet')}</div>`;
+  document.getElementById('addProductBtn')?.addEventListener('click', openProductModal);
+}
+
+/* ---------- Product Sales ---------- */
+function renderProductSales(){
+  const section = document.getElementById('view-productSales');
+  const sales = getAll('productSales').slice().sort((a,b)=>new Date(b.createdDate||0)-new Date(a.createdDate||0));
+  const rows = sales.map(s => { const pr = getById('products',s.productId); const cl = getById('closers',s.closerId); const cv = getById('clients',s.clientId); return `<tr><td class="cell-strong">${escapeHtml(pr?pr.name:'')}</td><td class="cell-dim">${escapeHtml(cl?cl.name:'')}</td><td class="cell-dim">${escapeHtml(cv?cv.name:'')}</td><td>${fmtMoney(s.salePrice)}</td><td style="color:var(--green)">${fmtMoney(s.closerCommission||0)}</td><td><span class="badge badge-${s.status==='paid'?'closed':'pending'}">${escapeHtml(s.status||'')}</span></td></tr>`; });
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Product Sales <span class="sm">${sales.length}</span></div></div>${makeTable(['Product','Closer','Client','Amount','Commission','Status'],rows,'No product sales yet')}</div>`;
+}
+
+/* ---------- New Sales ---------- */
+function renderSales(){
+  const section = document.getElementById('view-sales');
+  const u = CURRENT_USER;
+  const sales = (DB.sales||[]).slice().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  const rows = sales.map(s => {
+    const pm = s.productManagerId ? getById('managers',s.productManagerId) : null;
+    const sm = pm && pm.seniorManagerId ? getById('managers',pm.seniorManagerId) : null;
+    return `<tr>
+      <td class="cell-strong" style="color:var(--accent)">${escapeHtml(s.saleId||'')}</td>
+      <td>${fmtMoney(s.amount)}</td>
+      <td><span class="badge badge-${s.status==='verified'?'closed':'pending'}">${escapeHtml(s.status||'')}</span></td>
+      <td class="cell-dim">Closer: ${escapeHtml(s.closerId||'')}<br>PM: ${escapeHtml(pm?pm.name:(s.productManagerId||''))}</td>
+      <td class="cell-dim">${fmtDate(s.createdAt)}</td>
+    </tr>`;
+  });
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Sales <span class="sm">${sales.length}</span></div>${u.role==='admin'?`<button class="btn btn-primary btn-sm" id="createSaleBtn">+ Create Sale</button>`:''}</div>${sales.length===0?`<div class="empty-state"><div class="ic">📋</div><div class="s">No sales yet</div></div>`:`<div class="table-wrap"><table class="data-table"><thead><tr><th>Sale ID</th><th>Amount</th><th>Status</th><th>Attribution</th><th>Created</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`}</div>`;
+  document.getElementById('createSaleBtn')?.addEventListener('click', openNewSaleModal);
+}
+
+/* ---------- Managers ---------- */
+function renderManagers(){
+  const section = document.getElementById('view-managers');
+  if(CURRENT_USER.role !== 'admin' && CURRENT_USER.role !== 'seniorManager'){ section.innerHTML='<div class="panel"><p class="cell-dim">Access denied.</p></div>'; return; }
+  const allMgrs = getAll('managers').filter(m => m.role === 'manager' || m.type === 'manager' || !m.seniorManagerType);
+  const smFilter = CURRENT_USER.role === 'seniorManager' ? (m) => m.seniorManagerId === CURRENT_USER.entityId : () => true;
+  const mgrs = allMgrs.filter(smFilter);
+  const rows = mgrs.map(m => { const sm = m.seniorManagerId ? getById('managers',m.seniorManagerId) : null; const closerCount = getAll('closers').filter(c => c.assignedManagerId === m.id).length; return `<tr><td class="cell-strong">${escapeHtml(m.name||'')}</td><td class="cell-dim">${escapeHtml(m.email||'')}</td><td class="cell-dim">${escapeHtml(m.phone||'')}</td><td class="cell-dim">${escapeHtml(sm?sm.name:'(none)')}</td><td class="cell-dim">${closerCount}</td></tr>`; });
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Managers <span class="sm">${mgrs.length}</span></div>${CURRENT_USER.role==='admin'?`<button class="btn btn-primary btn-sm" id="addManagerBtn">+ Add Manager</button>`:''}</div>${makeTable(['Name','Email','Phone','Senior Manager','Closers'],rows,'No managers yet')}</div>`;
+  document.getElementById('addManagerBtn')?.addEventListener('click', openManagerModal);
+}
+
+/* ---------- Senior Managers (admin view) ---------- */
+function renderSeniorManagers(){
+  const section = document.getElementById('view-senior-managers');
+  if(!section){ return; }
+  if(CURRENT_USER.role !== 'admin'){ section.innerHTML='<div class="panel"><p class="cell-dim">Access denied.</p></div>'; return; }
+  const sms = getAll('managers').filter(m => m.role === 'seniorManager' || m.type === 'seniorManager');
+  const rows = sms.map(sm => {
+    const pmCount = getAll('managers').filter(m => m.seniorManagerId === sm.id).length;
+    const closerCount = getAll('closers').filter(c => {
+      const m = getById('managers', c.assignedManagerId);
+      return m && m.seniorManagerId === sm.id;
+    }).length;
+    return `<tr>
+      <td class="cell-strong">${escapeHtml(sm.name||'')}</td>
+      <td class="cell-dim">${escapeHtml(sm.email||'')}</td>
+      <td class="cell-dim">${escapeHtml(sm.phone||'')}</td>
+      <td class="cell-dim">${pmCount}</td>
+      <td class="cell-dim">${closerCount}</td>
+      <td class="row-actions"><button class="btn btn-ghost btn-sm" onclick="openManagerEditModal('${sm.id}')">Edit</button></td>
+    </tr>`;
+  });
+  section.innerHTML = `<div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Senior Managers <span class="sm">${sms.length}</span></div>
+      <div class="panel-actions">
+        <button class="btn btn-primary btn-sm" id="addSeniorManagerBtn">+ Add Senior Manager</button>
+      </div>
+    </div>
+    ${sms.length === 0
+      ? '<div class="empty-state"><div class="ic">👑</div><div class="t">No senior managers yet</div><div class="s">Create senior managers to oversee your product managers</div></div>'
+      : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>PMs</th><th>Closers</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`}
+  </div>`;
+  document.getElementById('addSeniorManagerBtn')?.addEventListener('click', openSeniorManagerModal);
+}
+
+/* ---------- Users ---------- */
+function renderUsers(){
+  const section = document.getElementById('view-users');
+  if(CURRENT_USER.role !== 'admin'){ section.innerHTML='<div class="panel"><p class="cell-dim">Access denied.</p></div>'; return; }
+  const users = getAll('users');
+  const rows = users.map(u => `<tr><td class="cell-strong">${escapeHtml(u.name||'')}</td><td class="cell-dim">${escapeHtml(u.loginId||'')}</td><td class="cell-dim">${escapeHtml(ROLE_LABELS[u.role]||u.role)}</td><td><span class="badge badge-${u.status==='active'?'new':'closed'}">${escapeHtml(u.status||'')}</span></td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Users <span class="sm">${users.length}</span></div></div>${makeTable(['Name','Login ID','Role','Status'],rows,'No users yet')}</div>`;
+}
+
+/* ---------- Commission Ledger ---------- */
+function renderCommissionLedger(){
+  const section = document.getElementById('view-commission-ledger');
+  const ledger = getAll('commissionLedger').slice().sort((a,b)=>new Date(b.verifiedAt||0)-new Date(a.verifiedAt||0));
+  const rows = ledger.map(l => `<tr><td class="cell-strong" style="color:var(--accent)">${escapeHtml(l.saleId||'')}</td><td style="color:var(--green)">${fmtMoney(l.closerAmount||0)}</td><td style="color:var(--accent-2)">${fmtMoney(l.productManagerAmount||0)}</td><td style="color:var(--amber)">${fmtMoney(l.seniorManagerAmount||0)}</td><td><span class="badge badge-${l.status==='verified'?'closed':'pending'}">${escapeHtml(l.status||'')}</span></td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Commission Ledger <span class="sm">${ledger.length}</span></div></div>${makeTable(['Sale ID','Closer (₹30K)','PM (₹5K)','SM (₹5K)','Status'],rows,'No commissions yet')}</div>`;
+}
+
+/* ---------- Other Views ---------- */
+function renderTickets(){
+  const section = document.getElementById('view-tickets');
+  const tickets = getAll('tickets');
+  const rows = tickets.map(t => `<tr><td>${escapeHtml(t.subject||'')}</td><td><span class="badge badge-${(t.status||'Open')==='Resolved'?'closed':'new'}">${escapeHtml(t.status||'')}</span></td><td class="cell-dim">${fmtDate(t.createdDate)}</td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Tickets <span class="sm">${tickets.length}</span></div></div>${makeTable(['Subject','Status','Created'],rows,'No tickets')}</div>`;
+}
+function renderActivity(){
+  const section = document.getElementById('view-activity');
+  const acts = getAll('activities').slice(0,100);
+  const rows = acts.map(a => `<tr><td class="cell-dim">${escapeHtml(a.type||'')}</td><td>${escapeHtml(a.message||'')}</td><td class="cell-dim">${fmtDateTime(a.timestamp)}</td></tr>`);
+  section.innerHTML = `<div class="panel"><div class="panel-head"><div class="panel-title">Activity Log <span class="sm">${acts.length}</span></div></div>${makeTable(['Type','Message','Time'],rows,'No activity')}</div>`;
+}
+function renderSettings(){
+  document.getElementById('view-settings').innerHTML = `<div class="panel"><div class="panel-title">Settings</div><p class="cell-dim">Settings panel — configure your workspace.</p></div>`;
+}
+function renderKanban(){
+  document.getElementById('view-kanban').innerHTML = `<div class="panel"><div class="panel-title">Pipeline</div><p class="cell-dim">Kanban view coming soon.</p></div>`;
+}
+function renderClientRequests(){
+  const section = document.getElementById('view-client-requests');
+  const reqs = getAll('clientRequests');
+  section.innerHTML = `<div class="panel"><div class="panel-title">Client Requests <span class="sm">${reqs.length}</span></div>${reqs.length===0?'<div class="empty-state"><div class="ic">🛒</div><div class="s">No requests</div></div>':''}</div>`;
+}
+
+/* ---------- Modals ---------- */
+function openModal(html){ document.getElementById('modalRoot').innerHTML = `<div class="modal-box">${html}</div>`; }
+function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
+
+function openLeadModal(){ openModal(`<div class="modal-head"><div class="modal-title">Add Lead</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_lead_name" type="text"></div><div class="field"><label>Email</label><input id="m_lead_email" type="email"></div><div class="field"><label>Phone</label><input id="m_lead_phone" type="text"></div><div class="field"><label>Source</label><input id="m_lead_source" type="text"></div><div class="field"><label>Status</label><select id="m_lead_status"><option>New Lead</option><option>Contacted</option><option>Follow Up</option><option>Negotiation</option><option>Closed</option></select></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveLead">Save</button></div>`); document.getElementById('m_saveLead').onclick=handleAddLead; }
+async function handleAddLead(){ const name=document.getElementById('m_lead_name').value; if(!name){toast('Name required','error');return;} await upsert('leads',{id:uid('lead'),name,email:document.getElementById('m_lead_email').value,phone:document.getElementById('m_lead_phone').value,source:document.getElementById('m_lead_source').value,status:document.getElementById('m_lead_status').value,createdDate:todayISO()}); closeModal(); renderLeads(); toast('Lead added','success'); }
+
+function openCloserModal(){ openModal(`<div class="modal-head"><div class="modal-title">Add Closer</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_clsr_name" type="text"></div><div class="field"><label>Email</label><input id="m_clsr_email" type="email"></div><div class="field"><label>Phone</label><input id="m_clsr_phone" type="text"></div><div class="field"><label>Manager ID</label><input id="m_clsr_mgr" type="text" placeholder="manager entity id"></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveCloser">Save</button></div>`); document.getElementById('m_saveCloser').onclick=handleAddCloser; }
+async function handleAddCloser(){ const name=document.getElementById('m_clsr_name').value; if(!name){toast('Name required','error');return;} await upsert('closers',{id:uid('clsr'),name,email:document.getElementById('m_clsr_email').value,phone:document.getElementById('m_clsr_phone').value,assignedManagerId:document.getElementById('m_clsr_mgr').value,status:'active',createdDate:todayISO()}); closeModal(); renderClosers(); toast('Closer added','success'); }
+
+function openSeniorManagerModal(){ const sms = getAll('managers').filter(m => m.role === 'seniorManager'); openModal(`<div class="modal-head"><div class="modal-title">Add Senior Manager</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_sm_name" type="text"></div><div class="field"><label>Email</label><input id="m_sm_email" type="email"></div><div class="field"><label>Phone</label><input id="m_sm_phone" type="text"></div><div class="field"><label>Login ID</label><input id="m_sm_login" type="text" placeholder="username for login"></div><div class="field"><label>Password</label><input id="m_sm_pass" type="password" placeholder="min 6 characters"></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveSM">Save</button></div>`); document.getElementById('m_saveSM').onclick=handleAddSeniorManager; }
+async function handleAddSeniorManager(){ const name=document.getElementById('m_sm_name').value; if(!name){toast('Name required','error');return;} const loginId=document.getElementById('m_sm_login').value; const pass=document.getElementById('m_sm_pass').value; if(!loginId||!pass||pass.length<6){toast('Login ID and password (min 6 chars) required','error');return;} if(getAll('users').find(u=>u.loginId===loginId)){toast('Login ID already taken','error');return;} const smId=uid('smgr'); await upsert('managers',{id:smId,name,email:document.getElementById('m_sm_email').value,phone:document.getElementById('m_sm_phone').value,role:'seniorManager',type:'seniorManager',status:'active',createdDate:todayISO()}); const hash=(typeof sha256==='function')?await sha256(pass):pass; await upsert('users',{id:uid('user'),name,loginId,passwordHash:hash,role:'seniorManager',entityId:smId,status:'active',createdDate:todayISO()}); closeModal(); renderSeniorManagers(); toast('Senior Manager created','success'); }
+
+function openManagerModal(){ const sms = getAll('managers').filter(m => m.role === 'seniorManager'); const smOptions = sms.map(s => `<option value="${s.id}">${s.name}</option>`).join(''); openModal(`<div class="modal-head"><div class="modal-title">Add Product Manager</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_mgr_name" type="text"></div><div class="field"><label>Email</label><input id="m_mgr_email" type="email"></div><div class="field"><label>Phone</label><input id="m_mgr_phone" type="text"></div><div class="field"><label>Senior Manager</label><select id="m_mgr_sm">${smOptions||'<option value="">-- None --</option>'}</select></div><div class="field"><label>Login ID</label><input id="m_mgr_login" type="text" placeholder="username for login"></div><div class="field"><label>Password</label><input id="m_mgr_pass" type="password" placeholder="min 6 characters"></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveMgr">Save</button></div>`); document.getElementById('m_saveMgr').onclick=handleAddManager; }
+async function handleAddManager(){ const name=document.getElementById('m_mgr_name').value; if(!name){toast('Name required','error');return;} const loginId=document.getElementById('m_mgr_login').value; const pass=document.getElementById('m_mgr_pass').value; if(!loginId||!pass||pass.length<6){toast('Login ID and password (min 6 chars) required','error');return;} if(getAll('users').find(u=>u.loginId===loginId)){toast('Login ID already taken','error');return;} const mgrId=uid('mgr'); await upsert('managers',{id:mgrId,name,email:document.getElementById('m_mgr_email').value,phone:document.getElementById('m_mgr_phone').value,role:'manager',type:'manager',seniorManagerId:document.getElementById('m_mgr_sm').value,status:'active',createdDate:todayISO()}); const hash=(typeof sha256==='function')?await sha256(pass):pass; await upsert('users',{id:uid('user'),name,loginId,passwordHash:hash,role:'manager',entityId:mgrId,status:'active',createdDate:todayISO()}); closeModal(); renderManagers(); toast('Manager created','success'); }
+
+function openManagerEditModal(mgrId){ const mgr=getById('managers',mgrId); if(!mgr)return; const sms=getAll('managers').filter(m=>m.role==='seniorManager'); const smOptions=sms.map(s=>`<option value="${s.id}" ${mgr.seniorManagerId===s.id?'selected':''}>${s.name}</option>`).join(''); openModal(`<div class="modal-head"><div class="modal-title">Edit Manager</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name</label><input id="m_mgr_name" type="text" value="${escapeHtml(mgr.name||'')}"></div><div class="field"><label>Email</label><input id="m_mgr_email" type="email" value="${escapeHtml(mgr.email||'')}"></div><div class="field"><label>Phone</label><input id="m_mgr_phone" type="text" value="${escapeHtml(mgr.phone||'')}"></div><div class="field" style="grid-column:1/-1"><label>Senior Manager</label><select id="m_mgr_sm">${smOptions||'<option value="">-- None --</option>'}</select></div></div></div><div class="modal-actions"><button class="btn btn-danger" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveMgr">Save</button></div>`); document.getElementById('m_saveMgr').onclick=()=>handleEditManager(mgrId); }
+async function handleEditManager(mgrId){ const mgr=getById('managers',mgrId); if(!mgr)return; Object.assign(mgr,{name:document.getElementById('m_mgr_name').value,email:document.getElementById('m_mgr_email').value,phone:document.getElementById('m_mgr_phone').value,seniorManagerId:document.getElementById('m_mgr_sm').value}); await upsert('managers',mgr); closeModal(); renderManagers(); renderSeniorManagers(); toast('Manager updated','success'); }
+
+function openClientModal(){ openModal(`<div class="modal-head"><div class="modal-title">Add Client</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_cl_name" type="text"></div><div class="field"><label>Email</label><input id="m_cl_email" type="email"></div><div class="field"><label>Phone</label><input id="m_cl_phone" type="text"></div><div class="field"><label>Company</label><input id="m_cl_company" type="text"></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveClient">Save</button></div>`); document.getElementById('m_saveClient').onclick=handleAddClient; }
+async function handleAddClient(){ const name=document.getElementById('m_cl_name').value; if(!name){toast('Name required','error');return;} await upsert('clients',{id:uid('cl'),name,email:document.getElementById('m_cl_email').value,phone:document.getElementById('m_cl_phone').value,company:document.getElementById('m_cl_company').value,status:'active',createdDate:todayISO()}); closeModal(); renderClients(); toast('Client added','success'); }
+
+function openProjectModal(){ openModal(`<div class="modal-head"><div class="modal-title">New Project</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_proj_name" type="text"></div><div class="field"><label>Client</label><select id="m_proj_client"><option value="">— None —</option>${getAll('clients').map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></div><div class="field"><label>Amount</label><input id="m_proj_amount" type="number"></div><div class="field"><label>Status</label><select id="m_proj_status"><option>Assigned</option><option>In Progress</option><option>Completed</option></select></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveProject">Save</button></div>`); document.getElementById('m_saveProject').onclick=handleAddProject; }
+async function handleAddProject(){ const name=document.getElementById('m_proj_name').value; if(!name){toast('Name required','error');return;} const n=await nextCounter('project'); await upsert('projects',{id:uid('proj'),name,clientId:document.getElementById('m_proj_client').value,amount:parseFloat(document.getElementById('m_proj_amount').value)||0,status:document.getElementById('m_proj_status').value,trackingId:'ELI-'+n,createdDate:todayISO()}); closeModal(); renderProjects(); toast('Project created: ELI-'+n,'success'); }
+
+function openProductModal(){ openModal(`<div class="modal-head"><div class="modal-title">Add Product</div><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-grid2"><div class="field" style="grid-column:1/-1"><label>Name *</label><input id="m_prd_name" type="text"></div><div class="field"><label>Category</label><select id="m_prd_cat"><option>Web App</option><option>SaaS Tool</option><option>E-book / PDF</option><option>Template Pack</option><option>Other</option></select></div><div class="field"><label>Price (₹)</label><input id="m_prd_price" type="number"></div><div class="field"><label>Status</label><select id="m_prd_status"><option>Draft</option><option>Active</option></select></div><div class="field" style="grid-column:1/-1"><label>Description</label><input id="m_prd_desc" type="text"></div></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="m_saveProduct">Save</button></div>`); document.getElementById('m_saveProduct').onclick=handleAddProduct; }
+async function handleAddProduct(){ const name=document.getElementById('m_prd_name').value; if(!name){toast('Name required','error');return;} await upsert('products',{id:uid('prd'),name,category:document.getElementById('m_prd_cat').value,price:parseFloat(document.getElementById('m_prd_price').value)||0,status:document.getElementById('m_prd_status').value,description:document.getElementById('m_prd_desc').value,createdDate:todayISO()}); closeModal(); renderProducts(); toast('Product added','success'); }
+
+/* ---------- New Sale Modal ---------- */
+async function openNewSaleModal(){
+  const products = getAll('products');
+  const closers = getAll('closers');
+  const clients = getAll('clients');
+  openModal(`
+    <div class="modal-head"><div class="modal-title">Create New Sale</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid2">
+        <div class="field" style="grid-column:1/-1"><label>Product *</label><select id="m_sale_product"><option value="">— Select —</option>${products.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} — ${fmtMoney(p.price)}</option>`).join('')}</select></div>
+        <div class="field"><label>Closer *</label><select id="m_sale_closer"><option value="">— Select —</option>${closers.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Client (optional)</label><select id="m_sale_client"><option value="">— None —</option>${clients.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Amount (₹) *</label><input id="m_sale_amount" type="number" placeholder="100000"></div>
+        <div class="field"><label>Currency</label><input id="m_sale_currency" value="INR" readonly></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="m_doCreateSale">Create Sale</button>
+    </div>
+  `);
+  document.getElementById('m_sale_product').addEventListener('change', function(){
+    const p = getById('products', this.value);
+    if(p) document.getElementById('m_sale_amount').value = p.price || '';
+  });
+  document.getElementById('m_doCreateSale').onclick = handleCreateSale;
+}
+
+async function handleCreateSale(){
+  const productId = document.getElementById('m_sale_product').value;
+  const closerId = document.getElementById('m_sale_closer').value;
+  const clientId = document.getElementById('m_sale_client').value;
+  const amount = parseFloat(document.getElementById('m_sale_amount').value);
+  if(!productId || !closerId || !amount){ toast('Fill all required fields','error'); return; }
+
+  // Inline createSale logic to avoid shared/sales.js dependency on app-local globals
+  const closer = await getById('closers', closerId);
+  if(!closer){ toast('Closer not found','error'); return; }
+  const product = await getById('products', productId);
+  if(!product){ toast('Product not found','error'); return; }
+
+  const productManagerId = closer.managerId;
+  if(!productManagerId){ toast('Closer has no assigned Product Manager','error'); return; }
+  const pm = await getById('managers', productManagerId);
+  if(!pm){ toast('Product Manager not found','error'); return; }
+
+  const seniorManagerId = pm.seniorManagerId;
+  if(!seniorManagerId){ toast('Product Manager has no Senior Manager','error'); return; }
+
+  const saleIdStr = await nextSaleId();
+  const sale = {
+    id: uid('sale'), saleId: saleIdStr, productId, clientId: clientId || null,
+    closerId, productManagerId, seniorManagerId, amount, currency: 'INR',
+    status: 'created', paymentStatus: 'pending', gateway: null,
+    gatewayOrderId: null, gatewayTransactionId: null,
+    createdAt: new Date().toISOString(), paymentInitiatedAt: null, verifiedAt: null,
+    attributionLocked: true, deliveryStatus: 'locked', deliveryTokenId: null, commissionStatus: 'pending'
+  };
+
+  try {
+    if(FIREBASE_AVAILABLE) await fsdb.collection('sales').doc(sale.id).set(sale);
+    DB.sales = DB.sales || [];
+    const idx = DB.sales.findIndex(x => x.id === sale.id);
+    if(idx >= 0) DB.sales[idx] = sale; else DB.sales.push(sale);
+    saveLocalCache();
+    closeModal();
+    renderSales();
+    toast('Sale created: ' + saleIdStr, 'success');
+    logActivity('Sale', 'New sale: ' + saleIdStr + ' for ' + fmtMoney(amount));
+  } catch(err) {
+    toast('Could not create sale: ' + err.message, 'error');
+  }
+}
+
+/* ---------- Log Activity ---------- */
+function logActivity(type, message){
+  const entry = { id: uid('act'), type, message, timestamp: new Date().toISOString() };
+  DB.activities = DB.activities || [];
+  DB.activities.unshift(entry);
+  if(DB.activities.length > 100) DB.activities = DB.activities.slice(0,100);
+  saveLocalCache();
+  if(FIREBASE_AVAILABLE) fsdb.collection('activities').doc(entry.id).set(entry).catch(()=>{});
+  if(document.getElementById('view-activity')?.classList.contains('active')) renderActivity();
+}
+
+/* ---------- Global Search ---------- */
+document.getElementById('globalSearchInput')?.addEventListener('input', function(){
+  const results = document.getElementById('globalSearchResults');
+  const q = this.value.toLowerCase();
+  if(!q || q.length < 2){ results.classList.remove('active'); return; }
+  const matches = [];
+  getAll('leads').forEach(l => { if((l.name||'').toLowerCase().includes(q)) matches.push({type:'Lead',name:l.name,view:'leads'}); });
+  getAll('closers').forEach(c => { if((c.name||'').toLowerCase().includes(q)) matches.push({type:'Closer',name:c.name,view:'closers'}); });
+  getAll('clients').forEach(c => { if((c.name||'').toLowerCase().includes(q)) matches.push({type:'Client',name:c.name,view:'clients'}); });
+  getAll('products').forEach(p => { if((p.name||'').toLowerCase().includes(q)) matches.push({type:'Product',name:p.name,view:'products'}); });
+  results.innerHTML = matches.slice(0,10).map(m => `<div class="search-result-item" data-view="${m.view}"><strong>${escapeHtml(m.type)}:</strong> ${escapeHtml(m.name)}</div>`).join('') || '<div class="search-result-item" style="color:var(--text-dim)">No results</div>';
+  results.classList.add('active');
+  results.querySelectorAll('.search-result-item[data-view]').forEach(el => {
+    el.addEventListener('click', () => { navigateTo(el.dataset.view); results.classList.remove('active'); document.getElementById('globalSearchInput').value = ''; });
+  });
+});
+document.addEventListener('click', e => { if(!e.target.closest('.global-search-wrap')) document.getElementById('globalSearchResults')?.classList.remove('active'); });
+
+/* ---------- Login Handler ---------- */
+async function handleLogin(){
+  const username = document.getElementById('loginUsername').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginErr');
+  if(!username || !pass){ err.style.display='block'; err.textContent='Enter both username and password.'; return; }
+  const user = findUserByLoginId(username);
+  if(!user){ err.style.display='block'; err.textContent='Incorrect username or password.'; return; }
+  if(user.status !== 'active'){ err.style.display='block'; err.textContent='This account has been disabled.'; return; }
+  // file:// placeholder: plaintext compare. Demo password is "elithnic123"
+  var ok = false;
+  if (user.passwordHash === '__FILEMODE_PLAIN__') {
+    ok = (pass === 'elithnic123');
+  } else if (typeof sha256 === 'function' && crypto && crypto.subtle) {
+    try {
+      var hash = await sha256(pass);
+      ok = (hash === user.passwordHash);
+    } catch(e){
+      ok = (pass === 'elithnic123');
+    }
+  } else {
+    ok = (pass === 'elithnic123');
+  }
+  if(!ok){ err.style.display='block'; err.textContent='Incorrect username or password.'; return; }
+  err.style.display='none';
+  setLoggedIn(user.id, true);
+  CURRENT_USER = user;
+  document.getElementById('loginPassword').value='';
+  document.getElementById('loginUsername').value='';
+  logActivity('System', user.name + ' (' + ROLE_LABELS[user.role] + ') logged in');
+  showApp();
+  toast('Welcome back, ' + user.name, 'success');
+}
+
+/* ---------- Forgot Reset ---------- */
+async function handleForgotReset(){
+  const key = document.getElementById('recoveryInput').value.trim().toUpperCase();
+  const newPass = document.getElementById('forgotNewPass').value;
+  const err = document.getElementById('forgotErr');
+  if(!key || !newPass || newPass.length < 6){ err.style.display='block'; err.textContent='Valid recovery key and password (min 6 chars) required.'; return; }
+  const hash = await sha256(key);
+  if(hash === DB.auth.recoveryKeyHash){
+    const admin = getAll('users').find(u => u.role === 'admin');
+    if(admin){ admin.passwordHash = await sha256(newPass); await upsert('users', admin); }
+    toast('Admin password reset. Sign in with new password.','success');
+    showScreen('loginScreen');
+  } else {
+    err.style.display='block'; err.textContent='Recovery key does not match.';
+  }
+}
+
+/* ---------- Logout ---------- */
+async function handleLogout(){
+  if(CURRENT_USER) logActivity('System', CURRENT_USER.name + ' logged out');
+  stopRealtimeSync();
+  clearLoggedIn();
+  CURRENT_USER = null;
+  showScreen('loginScreen');
+  toast('Signed out', 'info');
+}
+
+/* ---------- Loading Screen Status (updates premium UI) ---------- */
+let _lsProgress = 0;
+function setLoadingStatus(text, detail){
+  const sub = document.getElementById('loadingStatus');
+  const det = document.getElementById('loadingDetail');
+  const fill = document.getElementById('lsProgressFill');
+  if(sub) sub.textContent = text || 'Initializing…';
+  if(det) det.textContent = '';
+  if(fill){
+    const stages = ['30%','45%','60%','78%','92%','30%'];
+    _lsProgress = (_lsProgress + 1) % stages.length;
+    fill.style.width = stages[_lsProgress];
+  }
+  if(detail) console.info('[Init] ' + text + (detail ? ' — ' + detail : ''));
+}
+/* ---------- Force-hide the loading screen (idempotent) ----------
+   Used by every code path that needs to reveal the next screen. */
+function dismissLoadingScreen(){
+  console.log('[DISMISS] start');
+  var loading = document.getElementById('loadingScreen');
+  if(!loading){ console.warn('[DISMISS] #loadingScreen not found'); return; }
+  console.log('[DISMISS] loadingScreen found, current computed display:', window.getComputedStyle(loading).display);
+  loading.classList.add('hidden');
+  loading.classList.add('dismissed');
+  loading.style.setProperty('display', 'none', 'important');
+  loading.style.setProperty('pointer-events', 'none', 'important');
+  loading.style.setProperty('visibility', 'hidden', 'important');
+  loading.style.setProperty('opacity', '0', 'important');
+  loading.style.setProperty('z-index', '-1', 'important');
+  loading.setAttribute('aria-hidden', 'true');
+  // DOM inspection: which element covers the username input?
+  var inp = document.getElementById('loginUsername');
+  if(inp){
+    var rect = inp.getBoundingClientRect();
+    var cx = rect.left + rect.width/2;
+    var cy = rect.top + rect.height/2;
+    var topEl = document.elementFromPoint(cx, cy);
+    var computedLoading = window.getComputedStyle(loading);
+    console.log('[DISMISS] username input center:', cx, cy);
+    console.log('[DISMISS] element at username input:', topEl ? topEl.tagName + '#' + topEl.id + '.' + topEl.className : 'null');
+    console.log('[DISMISS] loadingScreen computed display:', computedLoading.display);
+    console.log('[DISMISS] loadingScreen computed visibility:', computedLoading.visibility);
+    console.log('[DISMISS] loadingScreen computed opacity:', computedLoading.opacity);
+    console.log('[DISMISS] loadingScreen computed zIndex:', computedLoading.zIndex);
+    console.log('[DISMISS] loadingScreen computed pointerEvents:', computedLoading.pointerEvents);
+    console.log('[DISMISS] loadingScreen computed filter:', computedLoading.filter);
+    console.log('[DISMISS] loadingScreen computed backdropFilter:', computedLoading.backdropFilter);
+    // Walk up from topEl to document root — find any ancestor with backdrop-filter or blur
+    var el = topEl;
+    var blurAncestors = [];
+    while(el && el !== document.documentElement){
+      var cs = window.getComputedStyle(el);
+      if(cs.backdropFilter && cs.backdropFilter !== 'none') blurAncestors.push(el.tagName + '#' + el.id + '.' + el.className + ' backdrop-filter:' + cs.backdropFilter);
+      if(cs.filter && cs.filter !== 'none') blurAncestors.push(el.tagName + '#' + el.id + '.' + el.className + ' filter:' + cs.filter);
+      el = el.parentElement;
+    }
+    if(blurAncestors.length) console.warn('[DISMISS] blur ancestors:', blurAncestors.join(' | '));
+    else console.log('[DISMISS] no blur ancestors found');
+  } else {
+    console.warn('[DISMISS] loginUsername not found');
+  }
+  // Also check loginScreen computed styles
+  var loginScreen = document.getElementById('loginScreen');
+  if(loginScreen){
+    var lsCs = window.getComputedStyle(loginScreen);
+    console.log('[DISMISS] loginScreen computed display:', lsCs.display);
+    console.log('[DISMISS] loginScreen computed opacity:', lsCs.opacity);
+    console.log('[DISMISS] loginScreen computed filter:', lsCs.filter);
+    console.log('[DISMISS] loginScreen computed backdropFilter:', lsCs.backdropFilter);
+    console.log('[DISMISS] loginScreen computed pointerEvents:', lsCs.pointerEvents);
+    console.log('[DISMISS] loginScreen computed visibility:', lsCs.visibility);
+  }
+  // Walk ALL fixed/absolute positioned elements in the document
+  var overlays = [];
+  document.querySelectorAll('*').forEach(function(el2){
+    var cs2 = window.getComputedStyle(el2);
+    var pos = cs2.position;
+    if(pos === 'fixed' || pos === 'absolute'){
+      var vis = cs2.visibility;
+      var op = cs2.opacity;
+      var disp = cs2.display;
+      var pe = cs2.pointerEvents;
+      var bf = cs2.backdropFilter;
+      if((vis !== 'hidden' && vis !== 'collapse') && op !== '0' && disp !== 'none' && pe !== 'none' && (bf !== 'none' || pos === 'fixed')){
+        var rect2 = el2.getBoundingClientRect();
+        if(rect2.width > 0 && rect2.height > 0){
+          overlays.push(el2.tagName + '#' + el2.id + '.' + el2.className + ' pos:' + pos + ' vis:' + vis + ' op:' + op + ' disp:' + disp + ' pe:' + pe + ' bf:' + bf + ' rect:' + JSON.stringify({w:Math.round(rect2.width),h:Math.round(rect2.height),x:Math.round(rect2.x),y:Math.round(rect2.y)}));
+        }
+      }
+    }
+  });
+  console.log('[DISMISS] overlay elements (fixed/absolute, visible):', overlays.slice(0, 20).join(' | '));
+}
+async function bootstrap(){
+  console.log('[BOOT] bootstrap START — protocol=' + window.location.protocol);
+  setLoadingStatus('Initializing operations platform…', 'boot');
+  console.log('[BOOT] setLoadingStatus done');
+
+  // ---- CRITICAL PATH for file://: show login IMMEDIATELY, then background init ----
+  if (window.location.protocol === 'file:') {
+    console.log('[BOOT] file:// fast path: loading local cache synchronously');
+    loadLocalCache();
+    console.log('[BOOT] loadLocalCache done');
+
+    // For file:// we can't trust crypto.subtle. Defer admin seeding to login time
+    // and just add an admin placeholder WITHOUT a password hash. The handleLogin
+    // function will hash the entered password at submission time and compare.
+    var exists = (DB.users||[]).some(function(u){ return u.loginId==='ADMIN' || u.loginId==='admin'; });
+    if (!exists) {
+      DB.users = DB.users||[];
+      DB.users.push({
+        id:'usr_admin_seed',name:'Admin',loginId:'ADMIN',role:'admin',
+        status:'active',passwordHash:'__FILEMODE_PLAIN__',
+        email:'admin@elithnic.local',createdDate:new Date().toISOString()
+      });
+      saveLocalCache();
+      console.log('[BOOT] admin placeholder seeded (file:// mode)');
+    } else {
+      console.log('[BOOT] admin already exists in local cache');
+    }
+
+    console.log('[BOOT] about to show login screen');
+    showScreen('loginScreen');
+    console.log('[BOOT] showScreen(loginScreen) done');
+    CURRENT_USER = resolveCurrentUser();
+    console.log('[BOOT] resolveCurrentUser done, user=', CURRENT_USER);
+
+    // FINAL DISMISS — runs immediately, not setTimeout
+    console.log('[BOOT] calling dismissLoadingScreen');
+    dismissLoadingScreen();
+    console.log('[BOOT] LOGIN SCREEN SHOWN');
+    console.log('[BOOT] LOADING SCREEN DISMISSED');
+    console.log('[BOOT] BOOTSTRAP COMPLETE');
+    return;
+  }
+
+  // ---- Normal path for HTTPS ----
+  try {
+    console.log('[BOOT] HTTPS path: calling loadDB()');
+    await loadDB();
+    console.log('[BOOT] loadDB done');
+  } catch(err) {
+    console.error('[Bootstrap] loadDB threw:', err);
+    setLoadingStatus('Preparing workspace…', 'cache');
+    loadLocalCache();
+    try { await ensureAdminSeed(); } catch(e){ console.error('[Seed]',e); }
+  }
+  CURRENT_USER = resolveCurrentUser();
+  console.log('[BOOT] resolveCurrentUser done, user=', CURRENT_USER);
+  if(CURRENT_USER){
+    console.log('[BOOT] showing app (user logged in)');
+    showApp();
+  } else {
+    console.log('[BOOT] showing login screen');
+    showScreen('loginScreen');
+  }
+  console.log('[BOOT] calling dismissLoadingScreen');
+  dismissLoadingScreen();
+  console.log('[BOOT] LOGIN SCREEN SHOWN');
+  console.log('[BOOT] LOADING SCREEN DISMISSED');
+  console.log('[BOOT] BOOTSTRAP COMPLETE');
+}
+
+/* ---------- User Lookup (auth.js dependency) ---------- */
+function findUserByLoginId(loginId){
+  const q = String(loginId||'').trim().toUpperCase();
+  return getAll('users').find(u => u.loginId === q);
+}
+
+/* ---------- Event Bindings ---------- */
+document.getElementById('loginBtn')?.addEventListener('click', handleLogin);
+document.getElementById('loginPassword')?.addEventListener('keypress', e => { if(e.key==='Enter') handleLogin(); });
+document.getElementById('showRecovery')?.addEventListener('click', () => { showScreen('forgotScreen'); });
+document.getElementById('backToLogin')?.addEventListener('click', () => { showScreen('loginScreen'); });
+document.getElementById('forgotResetBtn')?.addEventListener('click', handleForgotReset);
+document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
+document.getElementById('menuToggle')?.addEventListener('click', () => {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarBackdrop');
+  if(window.innerWidth <= 820){
+    sb.classList.toggle('open');
+    ov.classList.toggle('open');
+  } else {
+    sb.classList.toggle('closed');
+  }
+});
+document.getElementById('sidebarBackdrop')?.addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarBackdrop').classList.remove('open');
+});
+document.getElementById('notifBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('notifPanel').classList.toggle('show');
+});
+document.addEventListener('click', () => { document.getElementById('notifPanel')?.classList.remove('show'); });
+
+/* ---------- Start ---------- */
+try {
+  console.log('[BOOT] calling bootstrap()');
+  bootstrap();
+  console.log('[BOOT] bootstrap() call returned');
+} catch (err) {
+  console.error('[BOOT FATAL]', err);
+  try { showScreen('loginScreen'); } catch(e){}
+  try { dismissLoadingScreen(); } catch(e){}
+  console.log('[BOOT] LOGIN SCREEN SHOWN (fatal fallback)');
+  console.log('[BOOT] LOADING SCREEN DISMISSED (fatal fallback)');
+  console.log('[BOOT] BOOTSTRAP COMPLETE (fatal fallback)');
+}
+// Emergency absolute timer — fires at 500ms regardless of bootstrap state.
+// This is the MOST IMPORTANT safeguard. It ensures the loading overlay
+// disappears even if bootstrap() hangs before calling dismissLoadingScreen().
+setTimeout(function(){
+  console.warn('[BOOT] emergency timer firing at 500ms');
+  try { dismissLoadingScreen(); } catch(e){ console.error('[BOOT] dismiss err:', e); }
+  try { showScreen('loginScreen'); } catch(e){ console.error('[BOOT] showScreen err:', e); }
+  console.log('[BOOT] LOGIN SCREEN SHOWN (emergency timer)');
+  console.log('[BOOT] LOADING SCREEN DISMISSED (emergency timer)');
+  console.log('[BOOT] BOOTSTRAP COMPLETE (emergency timer)');
+}, 500);
+</script>
+</body>
+</html>

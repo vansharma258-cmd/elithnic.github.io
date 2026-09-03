@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ELAS — Checkout</title>
+<meta name="description" content="Complete your purchase of ELAS Business OS">
+<style>
+:root{
+  --bg:#0b0d10;
+  --bg-elev:#13171c;
+  --accent:#7c3aed;
+  --accent-2:#a78bfa;
+  --cyan:#22d3ee;
+  --magenta:#f472d6;
+  --gold:#d4af37;
+  --gold-2:#f6d878;
+  --gold-dim:#8a6d1f;
+  --accent-soft:rgba(124,58,237,0.14);
+  --glass:rgba(20,24,38,0.72);
+  --glass-border:rgba(255,255,255,0.08);
+  --glass-strong:rgba(20,24,38,0.85);
+  --text:#e8eaf0;
+  --text-dim:#9aa3b8;
+  --text-faint:#6b7280;
+  --green:#22c55e;
+  --red:#f87171;
+  --amber:#fbbf24;
+  --blue:#38bdf8;
+  --radius-lg:18px;
+  --radius-md:14px;
+  --radius-sm:10px;
+  --shadow-glass:0 8px 32px rgba(0,0,0,0.5);
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;overflow-x:hidden;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+  font-weight:400;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;
+  background-image:radial-gradient(circle at 15% -5%,rgba(124,58,237,0.18),transparent 50%),
+                   radial-gradient(circle at 85% 10%,rgba(34,211,238,0.10),transparent 45%),
+                   radial-gradient(circle at 50% 90%,rgba(212,175,55,0.06),transparent 55%);
+  background-attachment:fixed;
+}
+html{scroll-behavior:smooth;}
+.hidden{display:none !important;}
+
+/* NAV */
+.lp-nav{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(11,13,16,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--glass-border);}
+.lp-nav-brand{font-weight:800;font-size:15.5px;letter-spacing:-0.2px;background:linear-gradient(90deg,#fff,var(--gold-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;display:flex;align-items:center;gap:8px;}
+.lp-nav-brand-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(140deg,var(--gold-2),var(--gold));display:inline-flex;align-items:center;justify-content:center;color:#1a1608;font-weight:900;font-size:13px;}
+
+/* HERO + CONTAINER */
+.wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px;}
+.hero{text-align:center;margin-bottom:30px;}
+.eyebrow{display:inline-block;padding:6px 14px;border-radius:100px;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.08);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:0.08em;margin-bottom:18px;}
+.hero h1{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-0.02em;line-height:1.15;margin:0 0 10px;color:var(--text);}
+.hero p{font-size:15px;color:var(--text-dim);margin:0;}
+
+/* PANELS */
+.panel{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-glass);padding:24px;margin-bottom:18px;}
+.panel:hover{border-color:rgba(139,92,246,0.22);}
+.panel-title{font-size:16px;font-weight:700;margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+.panel-title .step-num{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#1a1608;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;}
+
+/* PRODUCT CARDS */
+.product-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
+.product-card{border:2px solid transparent;border-radius:14px;background:rgba(255,255,255,0.04);padding:18px;cursor:pointer;transition:all .2s var(--ease);position:relative;}
+.product-card:hover{border-color:rgba(124,58,237,0.4);background:rgba(124,58,237,0.05);}
+.product-card.selected{border-color:var(--gold);background:rgba(212,175,55,0.08);box-shadow:0 0 0 1px var(--gold),0 8px 24px rgba(212,175,55,0.18);}
+.product-card .pc-name{font-size:15px;font-weight:700;margin-bottom:6px;}
+.product-card .pc-desc{font-size:12.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.5;}
+.product-card .pc-price{font-size:22px;font-weight:800;color:var(--gold-2);letter-spacing:-0.5px;}
+.product-card .pc-price small{font-size:11px;color:var(--text-faint);font-weight:500;margin-left:4px;}
+.pc-tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:0.5px;text-transform:uppercase;background:rgba(212,175,55,0.15);color:var(--gold-2);margin-bottom:8px;}
+
+/* FORMS */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+@media(max-width:640px){.form-grid{grid-template-columns:1fr;}}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;color:var(--text-dim);margin-bottom:7px;font-weight:600;letter-spacing:0.2px;}
+.field input,.field select,.field textarea{
+  width:100%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.10);
+  border-radius:10px;
+  padding:11px 14px;
+  color:var(--text);
+  font-size:14px;
+  transition:border-color .2s,background .2s;
+  font-family:inherit;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:rgba(124,58,237,0.08);outline:none;}
+.field-hint{font-size:11.5px;color:var(--text-faint);margin-top:6px;}
+.field-err{font-size:11.5px;color:var(--red);margin-top:6px;display:none;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;border-radius:12px;border:1px solid transparent;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s,filter .15s,box-shadow .25s;white-space:nowrap;position:relative;overflow:hidden;font-family:inherit;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:linear-gradient(135deg,var(--cyan),var(--accent) 60%,var(--magenta));background-size:200% 200%;color:#fff;box-shadow:0 10px 26px rgba(139,92,246,0.4);}
+.btn-primary:hover{filter:brightness(1.12);box-shadow:0 12px 32px rgba(139,92,246,0.55);background-position:100% 0;}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-block{width:100%;}
+
+/* SUMMARY */
+.summary{display:flex;flex-direction:column;gap:8px;font-size:13px;}
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--glass-border);}
+.summary-row:last-child{border-bottom:none;}
+.summary-row .label{color:var(--text-dim);}
+.summary-row .value{font-weight:700;}
+.summary-row.total{margin-top:8px;padding-top:14px;border-top:1px solid var(--glass-border);font-size:16px;}
+.summary-row.total .value{color:var(--gold-2);font-size:22px;}
+
+/* COMMISSION ATTRIBUTION */
+.attribution{background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:14px 16px;font-size:12.5px;color:var(--text-dim);margin-top:12px;}
+.attribution strong{color:var(--gold-2);}
+
+/* TOAST */
+#toastContainer{position:fixed;top:18px;right:18px;z-index:500;display:flex;flex-direction:column;gap:10px;max-width:320px;}
+.toast{padding:13px 16px;border-radius:13px;font-size:13px;font-weight:600;display:flex;align-items:flex-start;gap:10px;background:rgba(20,24,38,0.92);border:1px solid var(--glass-border);box-shadow:0 14px 32px rgba(0,0,0,0.4);animation:toastIn .3s var(--ease);}
+@keyframes toastIn{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
+.toast.t-success{border-color:rgba(34,197,94,0.3);}
+.toast.t-error{border-color:rgba(248,113,113,0.3);}
+.toast.t-info{border-color:rgba(56,189,248,0.3);}
+
+/* EMPTY */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;}
+.empty-state .ic{font-size:34px;margin-bottom:10px;opacity:0.6;}
+.empty-state .t{font-weight:700;font-size:14px;margin-bottom:4px;}
+.empty-state .s{font-size:12.5px;color:var(--text-faint);max-width:340px;}
+
+/* LOADER */
+.loader{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* RESPONSIVE */
+@media(max-width:640px){
+  .wrap{padding:24px 16px 60px;}
+  .hero{margin-bottom:20px;}
+  .panel{padding:18px;}
+  .product-list{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="lp-nav">
+  <a href="/" class="lp-nav-brand">
+    <span class="lp-nav-brand-mark">EL</span>
+    ELAS
+  </a>
+  <a href="/" style="color:var(--text-dim);text-decoration:none;font-size:13px;">← Back to home</a>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <span class="eyebrow">SECURE CHECKOUT</span>
+    <h1>Complete your purchase</h1>
+    <p>One-time payment, lifetime access. No subscriptions.</p>
+  </div>
+
+  <!-- STEP 1: PRODUCT -->
+  <div class="panel">
+    <h2 class="panel-title"><span class="step-num">1</span> Select your plan</h2>
+    <div id="productList" class="product-list">
+      <div class="empty-state"><div class="ic">⏳</div><div class="t">Loading products…</div></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: CUSTOMER INFO -->
+  <div class="panel">
+    <h2 class="panel-title"><span class="step-num">2</span> Your details</h2>
+    <div class="form-grid">
+      <div class="field">
+        <label>Full name *</label>
+        <input type="text" id="custName" placeholder="Your name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Email *</label>
+        <input type="email" id="custEmail" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Phone *</label>
+        <input type="tel" id="custPhone" placeholder="+91 98765 43210" autocomplete="tel">
+      </div>
+      <div class="field">
+        <label>Company (optional)</label>
+        <input type="text" id="custCompany" placeholder="Your company">
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: CLOSER ID -->
+  <div class="panel">
+    <h2 class="panel-title"><span class="step-num">3</span> Closer ID</h2>
+    <div class="field">
+      <label>Enter the Closer ID provided to you</label>
+      <input type="text" id="closerIdInput" placeholder="e.g. CL01" autocomplete="off" style="text-transform:uppercase;letter-spacing:2px;font-weight:700;">
+      <div class="field-hint">This identifies which Closer referred you, so they can be credited for the sale.</div>
+      <div class="field-err" id="closerIdErr">Closer ID not found. Please check with the person who referred you.</div>
+    </div>
+    <div id="closerBadge" class="attribution hidden"></div>
+  </div>
+
+  <!-- STEP 4: REVIEW + PAY -->
+  <div class="panel">
+    <h2 class="panel-title"><span class="step-num">4</span> Review &amp; pay</h2>
+    <div class="summary" id="orderSummary">
+      <div class="summary-row"><span class="label">Product</span><span class="value" id="sumProduct">—</span></div>
+      <div class="summary-row"><span class="label">Subtotal</span><span class="value" id="sumSubtotal">—</span></div>
+      <div class="summary-row total"><span class="label">Total payable</span><span class="value" id="sumTotal">—</span></div>
+    </div>
+    <button class="btn btn-primary btn-block" id="payBtn" disabled style="margin-top:16px;">
+      Pay securely with PayU
+    </button>
+    <p style="text-align:center;font-size:11.5px;color:var(--text-faint);margin:14px 0 0;">
+      🔒 Payments are processed securely by PayU. We never store your card details.
+    </p>
+  </div>
+
+</div>
+
+<div id="toastContainer"></div>
+
+<!-- ELAS API base URL — Render backend -->
+<script>
+  window.ELAS_API_BASE = window.ELAS_API_BASE || 'https://elas-api.onrender.com';
+</script>
+<script src="/shared/elasApi.js"></script>
+
+<script>
+/* ===========================================================
+   ELAS — Public Checkout Page
+   ===========================================================
+   Flow:
+   1. Load active products via `listActiveProducts` callable (no Firestore read)
+   2. Customer enters details + Closer ID (e.g. CL01)
+   3. Lookup closer via `lookupCloserAttribution` callable (server-side; no
+      direct reads of closers/managers)
+   4. Call `createPayUSale` callable — server creates the client + sale
+      record AND returns a PayU session in one call
+   5. Submit form to PayU checkout (returns to /thanks/ on success)
+
+   NO anonymous Firebase Auth. NO direct Firestore reads/writes.
+   =========================================================== */
+
+/* ---------- State ---------- */
+const state = {
+  products: [],
+  selectedProduct: null,
+  closer: null,
+  manager: null,
+  seniorManager: null,
+  customer: { name: '', email: '', phone: '', company: '' }
+};
+
+/* ---------- Utilities ---------- */
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function fmtMoney(n){ n = Number(n)||0; return '₹' + n.toLocaleString('en-IN', {maximumFractionDigits:0}); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function escapeHtml(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toast(message, type='info'){
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast t-' + type;
+  t.innerHTML = `<span>${escapeHtml(message)}</span>`;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 250); }, 3500);
+}
+
+/* ---------- Load Products (server-side) ----------
+   /pay/ never reads the products collection directly. The
+   listActiveProducts callable returns ONLY public product fields
+   (id, name, description, price, etc.) — never zipUrl or any
+   delivery secrets.
+   =========================================================== */
+async function loadProducts(){
+  const list = document.getElementById('productList');
+  if (!window.ELAS_API) {
+    list.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div><div class="t">Checkout requires a connection</div><div class="s">Please reload this page when you have an internet connection.</div></div>`;
+    return;
+  }
+  try {
+    const res = await window.ELAS_API.listProducts();
+    const products = (res && res.products) || [];
+    state.products = products.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      price: p.price,
+      featured: p.featured
+    }));
+    if (state.products.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="ic">📦</div><div class="t">No products available</div><div class="s">Please contact support.</div></div>`;
+      return;
+    }
+    renderProducts();
+  } catch (err) {
+    console.error('[loadProducts]', err);
+    list.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div><div class="t">Could not load products</div><div class="s">${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderProducts(){
+  const list = document.getElementById('productList');
+  list.innerHTML = state.products.map(p => `
+    <div class="product-card" data-id="${escapeHtml(p.id)}">
+      ${p.featured ? '<span class="pc-tag">POPULAR</span>' : ''}
+      <div class="pc-name">${escapeHtml(p.name||'Product')}</div>
+      <div class="pc-desc">${escapeHtml(p.description||'')}</div>
+      <div class="pc-price">${fmtMoney(p.price||0)}<small>one-time</small></div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.product-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const pid = card.dataset.id;
+      state.selectedProduct = state.products.find(p => p.id === pid);
+      list.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      updateSummary();
+    });
+  });
+}
+
+function updateSummary(){
+  const product = state.selectedProduct;
+  const subtotal = product ? (Number(product.price)||0) : 0;
+  const total = subtotal; // no taxes for now
+  document.getElementById('sumProduct').textContent = product ? product.name : '—';
+  document.getElementById('sumSubtotal').textContent = fmtMoney(subtotal);
+  document.getElementById('sumTotal').textContent = fmtMoney(total);
+  updatePayButton();
+}
+
+function updatePayButton(){
+  const btn = document.getElementById('payBtn');
+  const ready = state.selectedProduct
+    && state.customer.name.trim()
+    && state.customer.email.trim()
+    && state.customer.phone.trim()
+    && state.closer
+    && state.manager
+    && state.seniorManager
+    && window.ELAS_API;
+  btn.disabled = !ready;
+}
+
+/* ---------- Closer ID lookup (server-side) ----------
+   The /pay/ page is unauthenticated, so it cannot directly read the
+   closers/managers collections (Firestore rules forbid it). Instead, it
+   calls the lookupCloserAttribution callable which returns ONLY the
+   attribution IDs + display names. The customer cannot enumerate the
+   closer/PM/SM hierarchy.
+
+   Each closer has a human-readable id like "CL01", "CL02".
+   The closer entity has:
+     - id (entity id)
+     - assignedManagerId  → Product Manager (managers collection)
+   The PM (managers) has:
+     - seniorManagerId   → Senior Manager (managers collection)
+   =========================================================== */
+async function lookupCloser(){
+  const input = document.getElementById('closerIdInput');
+  const errBox = document.getElementById('closerIdErr');
+  const badge = document.getElementById('closerBadge');
+  const raw = (input.value || '').trim().toUpperCase();
+  errBox.style.display = 'none';
+  state.closer = null;
+  state.manager = null;
+  state.seniorManager = null;
+  badge.classList.add('hidden');
+  if (!raw) { updatePayButton(); return; }
+  if (!window.ELAS_API) { errBox.textContent = 'Connection required to verify Closer ID.'; errBox.style.display = 'block'; updatePayButton(); return; }
+
+  try {
+    // Server-side: returns only attribution IDs + display names
+    const data = await window.ELAS_API.lookupCloser({ closerCode: raw });
+    if (!data) {
+      throw new Error('No response from server');
+    }
+    if (!data.valid) {
+      errBox.textContent = data.error || ('Closer ID "' + raw + '" not found. Please check with the person who referred you.');
+      errBox.style.display = 'block';
+      updatePayButton();
+      return;
+    }
+    // Build minimal local objects with ONLY the attribution fields.
+    // The /pay/ page never sees the full closer/PM/SM documents.
+    state.closer = { id: data.closerId, name: data.closerName };
+    state.manager = { id: data.productManagerId, name: data.productManagerName };
+    state.seniorManager = { id: data.seniorManagerId, name: data.seniorManagerName };
+
+    // Show attribution badge
+    badge.innerHTML = `
+      ✓ Verified — your sale will be attributed to:
+      <div style="margin-top:8px;line-height:1.7;">
+        <strong>Closer:</strong> ${escapeHtml(data.closerName||raw)}<br>
+        <strong>Product Manager:</strong> ${escapeHtml(data.productManagerName||'(unnamed)')}<br>
+        <strong>Senior Manager:</strong> ${escapeHtml(data.seniorManagerName||'(unnamed)')}
+      </div>
+    `;
+    badge.classList.remove('hidden');
+    updatePayButton();
+  } catch (err) {
+    console.error('[lookupCloser]', err);
+    errBox.textContent = 'Could not verify Closer ID: ' + (err.message||'');
+    errBox.style.display = 'block';
+    updatePayButton();
+  }
+}
+
+/* ---------- Create sale + PayU session (server-side) ----------
+   The single `createPayUSale` callable (no auth) does all the
+   server-side work:
+     - validates closer attribution
+     - loads the product server-side
+     - creates / updates the client record
+     - generates the next SALE-XXXX id atomically
+     - creates the sale record (pending)
+     - creates a PayU checkout session
+   The browser never writes to Firestore and never reads sales/clients
+   collections.
+   =========================================================== */
+async function handlePay(){
+  const btn = document.getElementById('payBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Preparing checkout…';
+
+  try {
+    const product = state.selectedProduct;
+    const cust = state.customer;
+    const data = await window.ELAS_API.createSale({
+      productId: product.id,
+      closerCode: (document.getElementById('closerIdInput').value || '').trim().toUpperCase(),
+      customer: {
+        name: cust.name,
+        email: cust.email,
+        phone: cust.phone,
+        company: cust.company
+      }
+    });
+
+    if (!data || !data.success || !data.paymentUrl) {
+      throw new Error((data && data.error) || 'No checkout URL returned from server');
+    }
+
+    // Redirect to PayU
+    toast('Redirecting to PayU…', 'info');
+    const params = data.params || {};
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = data.paymentUrl;
+    Object.keys(params).forEach(k => {
+      const i = document.createElement('input');
+      i.type = 'hidden';
+      i.name = k;
+      i.value = params[k];
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  } catch (err) {
+    console.error('[handlePay]', err);
+    toast('Could not start checkout: ' + (err.message||'Unknown error'), 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Pay securely with PayU';
+  }
+}
+
+/* ---------- Wire up UI ---------- */
+function init(){
+  // Product selection
+  // (handled in renderProducts)
+
+  // Customer info
+  ['custName','custEmail','custPhone','custCompany'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      state.customer[id.replace('cust','').toLowerCase()] = el.value;
+      updatePayButton();
+    });
+  });
+
+  // Closer ID — debounced lookup on input
+  let closerTimer = null;
+  const closerInput = document.getElementById('closerIdInput');
+  closerInput.addEventListener('input', () => {
+    clearTimeout(closerTimer);
+    closerTimer = setTimeout(lookupCloser, 400);
+  });
+  closerInput.addEventListener('blur', () => {
+    clearTimeout(closerTimer);
+    lookupCloser();
+  });
+
+  // Pay button
+  document.getElementById('payBtn').addEventListener('click', handlePay);
+
+  // Initial load
+  loadProducts();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: elas-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: ALLOWED_ORIGINS
+        value: https://getelasos.com,https://www.getelasos.com
+      - key: PAYU_ENV
+        value: test
+      # All other env vars (FIREBASE_SERVICE_ACCOUNT, PAYU_MERCHANT_KEY,
+      # PAYU_MERCHANT_SALT, FIREBASE_WEB_API_KEY, ELAS_BOOTSTRAP_SECRET)
+      # are set manually in the Render dashboard for security.
+      # DO NOT put actual values in this file.
+    autoDeploy: true

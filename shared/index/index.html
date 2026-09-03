@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ELAS Business OS Lite — The Business OS Built for Agencies</title>
+<meta name="description" content="One cohesive operating system for your entire agency operation. CRM, lead management, client management, project operations, sales tracking, and commission tracking — all in one place. One-time payment, lifetime access.">
+<style>
+:root{
+  --bg:#0b0d10;
+  --bg-elev:#13171c;
+  --accent:#7c3aed;
+  --accent-2:#a78bfa;
+  --cyan:#22d3ee;
+  --magenta:#f472d6;
+  --gold:#d4af37;
+  --gold-2:#f6d878;
+  --gold-dim:#8a6d1f;
+  --accent-soft:rgba(124,58,237,0.14);
+  --glass:rgba(20,24,38,0.72);
+  --glass-strong:rgba(20,24,38,0.85);
+  --glass-border:rgba(255,255,255,0.08);
+  --text:#e8eaf0;
+  --text-dim:#9aa3b8;
+  --text-faint:#6b7280;
+  --green:#22c55e;
+  --red:#f87171;
+  --amber:#fbbf24;
+  --blue:#38bdf8;
+  --radius-lg:18px;
+  --radius-md:14px;
+  --radius-sm:10px;
+  --shadow-glass:0 8px 32px rgba(0,0,0,0.5);
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;overflow-x:hidden;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+  font-weight:400;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;
+  background-image:radial-gradient(circle at 15% -5%,rgba(124,58,237,0.18),transparent 50%),
+                   radial-gradient(circle at 85% 10%,rgba(34,211,238,0.10),transparent 45%),
+                   radial-gradient(circle at 50% 90%,rgba(212,175,55,0.06),transparent 55%);
+  background-attachment:fixed;
+}
+html{scroll-behavior:smooth;}
+
+.lp-wrap{min-height:100vh;background:transparent;color:var(--text);position:relative;z-index:1;}
+
+/* ============== NAVIGATION ============== */
+.lp-nav{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(11,13,16,0.78);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid rgba(255,255,255,0.06);}
+.lp-nav-brand{text-decoration:none;display:flex;align-items:center;gap:10px;}
+.lp-nav-brand-mark{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(212,175,55,0.18),transparent 70%);box-shadow:0 0 24px rgba(212,175,55,0.4),inset 0 0 0 1px rgba(255,255,255,0.1);font-size:14px;font-weight:900;color:var(--gold-2);}
+.lp-nav-brand-text{font-weight:900;font-size:18px;letter-spacing:-0.5px;color:var(--text);background:linear-gradient(90deg,#fff,var(--gold-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.lp-nav-brand-sub{font-weight:400;font-size:11px;color:var(--accent-2);letter-spacing:0.12em;margin-left:6px;text-transform:uppercase;}
+.lp-nav-links{display:flex;align-items:center;gap:20px;}
+.lp-nav-links a{color:var(--text-dim);text-decoration:none;font-size:13.5px;font-weight:600;transition:color .2s;position:relative;}
+.lp-nav-links a:hover{color:var(--text);}
+.lp-nav-links a::after{content:'';position:absolute;left:0;right:0;bottom:-6px;height:1px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transform:scaleX(0);transform-origin:left;transition:transform .3s var(--ease);}
+.lp-nav-links a:hover::after{transform:scaleX(1);}
+
+/* ============== BUTTONS ============== */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 20px;border-radius:10px;font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer;border:none;transition:transform .2s,box-shadow .2s,filter .2s;font-family:inherit;letter-spacing:-0.005em;position:relative;overflow:hidden;}
+.btn-primary{background:linear-gradient(135deg,var(--cyan),var(--accent) 60%,var(--magenta));background-size:200% 200%;color:#fff;box-shadow:0 8px 22px rgba(139,92,246,0.35);}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(139,92,246,0.55);filter:brightness(1.1);background-position:100% 0;}
+.btn-primary::after{content:'';position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(120deg,transparent,rgba(255,255,255,0.3),transparent);transform:skewX(-20deg);transition:left .6s ease;}
+.btn-primary:hover::after{left:130%;}
+.btn-ghost{background:rgba(255,255,255,0.04);color:var(--text);border:1px solid var(--glass-border);}
+.btn-ghost:hover{background:rgba(255,255,255,0.09);transform:translateY(-1px);}
+.btn-sm{padding:8px 16px;font-size:12.5px;border-radius:9px;}
+
+/* ============== HERO ============== */
+.lp-hero{padding:90px 24px 80px;text-align:center;max-width:880px;margin:0 auto;position:relative;animation:heroIn .8s var(--ease) both;}
+@keyframes heroIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.lp-hero-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:100px;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.08);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:0.1em;margin-bottom:24px;animation:pulseGlow 3s ease-in-out infinite;}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,0.4);}50%{box-shadow:0 0 0 8px rgba(124,58,237,0);}}
+.lp-hero-badge span{margin-right:6px;}
+.lp-hero-title{font-size:clamp(38px,6.4vw,72px);font-weight:900;letter-spacing:-0.035em;line-height:1.05;margin:0 0 22px;color:var(--text);}
+.lp-hero-title em{font-style:normal;background:linear-gradient(135deg,#7c3aed 0%,#a855f7 50%,#22d3ee 100%);background-size:200% 200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gradShift 6s ease-in-out infinite;}
+@keyframes gradShift{0%,100%{background-position:0% 50%;}50%{background-position:100% 50%;}}
+.lp-hero-sub{font-size:clamp(15px,2vw,18.5px);line-height:1.65;color:var(--text-dim);max-width:660px;margin:0 auto 40px;}
+.lp-hero-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-bottom:64px;}
+.lp-hero-stats{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;}
+.lp-stat{display:flex;flex-direction:column;align-items:center;padding:14px 24px;border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(8px);transition:transform .2s,border-color .2s;}
+.lp-stat:hover{transform:translateY(-2px);border-color:rgba(124,58,237,0.3);}
+.lp-stat span{font-size:14px;font-weight:700;color:var(--text);}
+.lp-stat small{font-size:11px;color:var(--text-dim);margin-top:2px;}
+
+/* ============== SECTIONS ============== */
+.lp-section{padding:90px 24px;max-width:1100px;margin:0 auto;text-align:center;position:relative;}
+.lp-section-dark{background:rgba(255,255,255,0.012);border-top:1px solid var(--glass-border);border-bottom:1px solid var(--glass-border);}
+.lp-section-label{display:inline-block;font-size:11px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;padding:5px 12px;border-radius:100px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.18);}
+.lp-section-title{font-size:clamp(26px,4.2vw,48px);font-weight:900;letter-spacing:-0.025em;line-height:1.12;margin:0 0 18px;color:var(--text);}
+.lp-section-title-2{font-size:clamp(26px,4.2vw,48px);font-weight:900;letter-spacing:-0.025em;line-height:1.12;margin:0 0 18px;color:var(--text);background:linear-gradient(120deg,#f5f0e6 25%,#f6d878 70%,#d4af37 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.lp-section-body{font-size:clamp(14px,1.8vw,17px);line-height:1.65;color:var(--text-dim);max-width:680px;margin:0 auto;}
+
+/* ============== MODULES ============== */
+.lp-modules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:54px;text-align:left;}
+.lp-module-card{display:flex;gap:16px;padding:22px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass);backdrop-filter:blur(8px);transition:border-color .25s var(--ease),transform .25s var(--ease),box-shadow .25s var(--ease);position:relative;overflow:hidden;}
+.lp-module-card::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(120deg,transparent 30%,rgba(212,175,55,0.08) 48%,rgba(255,255,255,0.04) 50%,transparent 68%);background-size:220% 220%;background-position:120% 0;opacity:0;transition:opacity .3s;}
+.lp-module-card:hover{border-color:rgba(124,58,237,0.4);transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,0.35);}
+.lp-module-card:hover::before{opacity:1;animation:shineSweep 1.1s ease forwards;}
+@keyframes shineSweep{from{background-position:120% 0;}to{background-position:-20% 0;}}
+.lp-module-icon{font-size:22px;flex-shrink:0;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(34,211,238,0.10));border:1px solid rgba(124,58,237,0.3);}
+.lp-module-info h3{font-size:14.5px;font-weight:700;color:var(--text);margin:0 0 6px;}
+.lp-module-info p{font-size:13px;color:var(--text-dim);line-height:1.55;margin:0;}
+
+/* ============== WORKFLOW ============== */
+.lp-steps{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;justify-content:center;margin-top:54px;text-align:left;}
+.lp-step{flex:1;min-width:160px;max-width:220px;padding:22px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass);backdrop-filter:blur(8px);transition:transform .2s,border-color .2s;position:relative;}
+.lp-step:hover{transform:translateY(-2px);border-color:rgba(124,58,237,0.3);}
+.lp-step-num{font-size:11px;font-weight:900;color:var(--accent);letter-spacing:0.12em;margin-bottom:10px;display:inline-block;padding:3px 9px;border-radius:100px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.2);}
+.lp-step h3{font-size:14.5px;font-weight:700;color:var(--text);margin:0 0 8px;}
+.lp-step p{font-size:13px;color:var(--text-dim);line-height:1.55;margin:0;}
+.lp-step-arrow{font-size:22px;color:var(--accent);align-self:center;flex-shrink:0;font-weight:700;}
+
+/* ============== ROLES ============== */
+.lp-roles-grid{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:42px;}
+.lp-role-card{display:flex;flex-direction:column;align-items:center;padding:22px 26px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass);backdrop-filter:blur(8px);min-width:150px;gap:10px;transition:transform .2s,border-color .2s;}
+.lp-role-card:hover{transform:translateY(-3px);border-color:rgba(124,58,237,0.35);}
+.lp-role-admin{border-color:rgba(212,175,55,0.4);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(124,58,237,0.06));}
+.lp-role-icon{font-size:30px;line-height:1;}
+.lp-role-card h3{font-size:14.5px;font-weight:700;color:var(--text);margin:0;}
+.lp-role-card p{font-size:12.5px;color:var(--text-dim);line-height:1.5;margin:0;text-align:center;}
+
+/* ============== PRICING ============== */
+.lp-pricing-card{max-width:500px;margin:54px auto 0;padding:44px 40px;border:1px solid rgba(124,58,237,0.4);border-radius:22px;background:linear-gradient(135deg,rgba(124,58,237,0.10) 0%,rgba(168,85,247,0.04) 50%,rgba(34,211,238,0.04) 100%);text-align:center;position:relative;overflow:hidden;backdrop-filter:blur(12px);}
+.lp-pricing-card::before{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:1px;background:conic-gradient(from 0deg,var(--gold),var(--gold-2),var(--gold-dim),var(--gold));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:rotateBorder 7s linear infinite;opacity:.5;pointer-events:none;}
+@keyframes rotateBorder{to{transform:rotate(360deg);}}
+.lp-pricing-label{font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;}
+.lp-pricing-amount{font-size:clamp(44px,8.5vw,72px);font-weight:900;letter-spacing:-0.035em;color:var(--text);line-height:1;margin-bottom:10px;background:linear-gradient(135deg,#fff,var(--gold-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.lp-pricing-note{font-size:13px;color:var(--text-dim);margin-bottom:30px;}
+.lp-pricing-features{list-style:none;padding:0;margin:0 0 30px;text-align:left;}
+.lp-pricing-features li{font-size:13.5px;color:var(--text);padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:10px;}
+.lp-pricing-features li::before{content:'✓';color:var(--green);font-weight:900;font-size:14px;flex-shrink:0;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(34,197,94,0.12);}
+.lp-pricing-features li:last-child{border-bottom:none;}
+.lp-pricing-cta{display:flex;flex-direction:column;gap:10px;}
+
+/* ============== COMPARE ============== */
+.lp-compare{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:54px;text-align:left;}
+.lp-compare-col{padding:26px;border-radius:14px;border:1px solid var(--glass-border);backdrop-filter:blur(6px);}
+.lp-compare-old{background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.06);}
+.lp-compare-new{background:linear-gradient(135deg,rgba(124,58,237,0.10),rgba(34,211,238,0.04));border-color:rgba(124,58,237,0.3);}
+.lp-compare-label{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:18px;}
+.lp-compare-old .lp-compare-label{color:rgba(255,255,255,0.4);}
+.lp-compare-new .lp-compare-label{color:var(--accent);}
+.lp-compare-col ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px;}
+.lp-compare-col ul li{font-size:13px;color:var(--text-dim);line-height:1.5;padding-left:22px;position:relative;}
+.lp-compare-old ul li::before{content:'✕';position:absolute;left:0;top:0;color:var(--red);font-weight:900;}
+.lp-compare-new ul li{color:var(--text);}
+.lp-compare-new ul li::before{content:'✓';position:absolute;left:0;top:0;color:var(--green);font-weight:900;}
+
+/* ============== FAQ ============== */
+.lp-faq-list{max-width:720px;margin:46px auto 0;text-align:left;display:flex;flex-direction:column;gap:10px;}
+.lp-faq-item{border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(6px);overflow:hidden;transition:border-color .2s;}
+.lp-faq-item[open]{border-color:rgba(124,58,237,0.3);}
+.lp-faq-item summary{list-style:none;padding:16px 22px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .2s;}
+.lp-faq-item summary:hover{background:rgba(255,255,255,0.04);}
+.lp-faq-item summary::-webkit-details-marker{display:none;}
+.lp-faq-item summary span{color:var(--accent);font-size:20px;font-weight:900;transition:transform .2s;}
+.lp-faq-item[open] summary span{transform:rotate(45deg);}
+.lp-faq-item p{padding:0 22px 18px;font-size:13.5px;color:var(--text-dim);line-height:1.65;margin:0;}
+
+/* ============== CTA + FOOTER ============== */
+.lp-section-cta{padding:90px 24px;position:relative;}
+.lp-section-cta::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(124,58,237,0.4),transparent);}
+.lp-footer{padding:46px 24px;text-align:center;border-top:1px solid var(--glass-border);background:rgba(11,13,16,0.6);}
+.lp-footer-brand{font-size:18px;font-weight:900;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.lp-footer-brand strong{background:linear-gradient(90deg,#fff,var(--gold-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.lp-footer-links{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-bottom:14px;}
+.lp-footer-links a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;transition:color .2s;}
+.lp-footer-links a:hover{color:var(--text);}
+.lp-footer-contact{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;margin-bottom:18px;font-size:12.5px;color:var(--text-dim);}
+.lp-footer-copy{font-size:11.5px;color:var(--text-faint);opacity:0.65;text-align:center;margin-top:14px;}
+
+/* ============== MOBILE ============== */
+@media(max-width:768px){
+  .lp-hero{padding:56px 16px 50px;}
+  .lp-section{padding:56px 16px;}
+  .lp-nav{padding:12px 14px;}
+  .lp-nav-brand-mark{display:none;}
+  .lp-nav-links a:not(.btn):not(:last-child){display:none;}
+  .lp-compare{grid-template-columns:1fr;}
+  .lp-step{max-width:100%;}
+  .lp-pricing-card{padding:30px 22px;}
+  .lp-section-cta{padding:60px 16px;}
+}
+</style>
+</head>
+<body>
+<div class="lp-wrap">
+  <nav class="lp-nav">
+    <a href="#lp-top" class="lp-nav-brand">
+      <span style="font-weight:900;font-size:18px;letter-spacing:-0.5px;color:var(--text);">ELAS</span>
+      <span style="font-weight:400;font-size:12px;color:var(--accent-2);letter-spacing:0.1em;margin-left:6px;">LITE</span>
+    </a>
+    <div class="lp-nav-links">
+      <a href="#lp-modules">Modules</a>
+      <a href="#lp-roles">Roles</a>
+      <a href="#lp-pricing">Pricing</a>
+      <a href="#lp-faq">FAQ</a>
+      <a class="btn btn-primary btn-sm" href="/app/" style="text-decoration:none;margin-left:6px;">Business OS Login</a>
+    </div>
+  </nav>
+
+  <section class="lp-hero" id="lp-top">
+    <div class="lp-hero-badge"><span>✦</span> ELAS Business OS Lite</div>
+    <h1 class="lp-hero-title">The Business OS<br><em>Built for Agencies</em></h1>
+    <p class="lp-hero-sub">Instead of paying for five different tools — and stitching them together yourself — get one cohesive operating system that handles your entire agency operation, from leads to delivery to commissions, out of the box.</p>
+    <div class="lp-hero-actions">
+      <a href="#lp-pricing" class="btn btn-primary">Get ELAS Lite →</a>
+      <a href="#lp-modules" class="btn btn-ghost">See what's inside</a>
+      <a class="btn btn-ghost" href="/app/">Business OS Login</a>
+    </div>
+    <div class="lp-hero-stats">
+      <div class="lp-stat"><span>CRM</span><small>Lead pipeline</small></div>
+      <div class="lp-stat"><span>Projects</span><small>End-to-end delivery</small></div>
+      <div class="lp-stat"><span>Finance</span><small>Commissions &amp; payouts</small></div>
+      <div class="lp-stat"><span>Firebase</span><small>Your data, your account</small></div>
+    </div>
+  </section>
+
+  <section class="lp-section" id="lp-what">
+    <div class="lp-section-label">Overview</div>
+    <h2 class="lp-section-title">One system.<br>Your entire operation.</h2>
+    <p class="lp-section-body" style="margin-top:12px;">You acquire it once. You deploy it once. You run your entire agency from it, forever.</p>
+  </section>
+
+  <section class="lp-section lp-section-dark" id="lp-modules">
+    <div class="lp-section-label">What's Inside</div>
+    <h2 class="lp-section-title">Eight modules.<br>One unified system.</h2>
+    <div class="lp-modules-grid">
+      <div class="lp-module-card">
+        <div class="lp-module-icon">◎</div>
+        <div class="lp-module-info"><h3>CRM &amp; Lead Management</h3><p>Capture, score, and track every lead through your pipeline. Kanban view for the team, detailed profiles for every contact, and full follow-up history.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">👥</div>
+        <div class="lp-module-info"><h3>Client Management</h3><p>Manage all client accounts, their active projects, and communication history in one place. Clients get their own portal to track progress.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">📦</div>
+        <div class="lp-module-info"><h3>Project Operations</h3><p>Full project lifecycle from brief to delivery. Assign to delivery partners, manage revisions, get client sign-off — all tracked and auditable.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">🔗</div>
+        <div class="lp-module-info"><h3>Team Operations</h3><p>Onboard managers, closers, and delivery partners. Assign materials, track activity, and manage permissions — all scoped by role.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">📊</div>
+        <div class="lp-module-info"><h3>Sales &amp; Deal Tracking</h3><p>Structured deal management for every product and service your agency sells. Closed, lost, paid, delivered — all tracked with commission.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">💰</div>
+        <div class="lp-module-info"><h3>Finance &amp; Commission</h3><p>Real commission tracking per closer per deal. Running wallet balances, payout logs, and manager commission — auditable in one view.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">🔐</div>
+        <div class="lp-module-info"><h3>Role-Based Access</h3><p>Admin, Manager, Closer, Delivery Partner, Freelancer, Client — each with scoped data and permissions enforced at the data layer.</p></div>
+      </div>
+      <div class="lp-module-card">
+        <div class="lp-module-icon">☁</div>
+        <div class="lp-module-info"><h3>Firebase-Backed Data</h3><p>All data lives in your Firebase project. Local-first for speed, real-time sync for collaboration. Your data, your infrastructure.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-section" id="lp-workflow">
+    <div class="lp-section-label">Workflow</div>
+    <h2 class="lp-section-title">From lead to paid — in one place.</h2>
+    <div class="lp-steps">
+      <div class="lp-step"><div class="lp-step-num">01</div><h3>Leads come in</h3><p>Captured in the CRM with source, score, and status. Assigned to the right closer by a manager.</p></div>
+      <div class="lp-step-arrow">→</div>
+      <div class="lp-step"><div class="lp-step-num">02</div><h3>Deal is closed</h3><p>Structured deal form captures product, amount, commission percentage, and manager configuration.</p></div>
+      <div class="lp-step-arrow">→</div>
+      <div class="lp-step"><div class="lp-step-num">03</div><h3>Project runs</h3><p>Delivery partner picks it up. Client tracks progress. Revisions managed in-system.</p></div>
+      <div class="lp-step-arrow">→</div>
+      <div class="lp-step"><div class="lp-step-num">04</div><h3>Commission pays out</h3><p>Closer wallet updates automatically. Payouts logged and approved. Manager gets their share.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-section lp-section-dark" id="lp-roles">
+    <div class="lp-section-label">Role Ecosystem</div>
+    <h2 class="lp-section-title">Five roles. Zero confusion.</h2>
+    <p class="lp-section-body" style="max-width:560px;margin:0 auto 40px;">Every account has a role. Every action is scoped. Permissions enforced at the data layer — no one sees what they shouldn't.</p>
+    <div class="lp-roles-grid">
+      <div class="lp-role-card lp-role-admin"><div class="lp-role-icon">👑</div><h3>Admin</h3><p>Full system visibility, all operations, all users. Configures the OS.</p></div>
+      <div class="lp-role-card"><div class="lp-role-icon">📋</div><h3>Manager</h3><p>Team operations, closer onboarding, performance, and commission oversight.</p></div>
+      <div class="lp-role-card"><div class="lp-role-icon">🎯</div><h3>Closer</h3><p>Owns leads, closes deals, tracks commissions in their personal wallet.</p></div>
+      <div class="lp-role-card"><div class="lp-role-icon">📦</div><h3>Delivery Partner</h3><p>Accepts project tasks, delivers work, manages revisions and sign-off.</p></div>
+      <div class="lp-role-card"><div class="lp-role-icon">🧑</div><h3>Client</h3><p>Tracks project status, reviews deliverables, and communicates in one portal.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-section" id="lp-pricing">
+    <div class="lp-section-label">Investment</div>
+    <h2 class="lp-section-title">One-time acquisition.<br>Your own Business OS.</h2>
+    <div class="lp-pricing-card">
+      <div class="lp-pricing-label">ELAS Business OS Lite</div>
+      <div class="lp-pricing-amount">₹1,00,000</div>
+      <div class="lp-pricing-note">One-time payment · Lifetime access · Firebase-backed</div>
+      <ul class="lp-pricing-features">
+        <li>✓ All 8 modules included</li>
+        <li>✓ Unlimited users</li>
+        <li>✓ Role-based access control</li>
+        <li>✓ Firebase setup &amp; deployment guidance</li>
+        <li>✓ Admin credentials issued to you</li>
+        <li>✓ Your data on your Firebase account</li>
+        <li>✓ Future module additions at negotiated terms</li>
+      </ul>
+      <div class="lp-pricing-cta">
+        <a class="btn btn-primary" href="mailto:getelasos@gmail.com?subject=ELAS%20Business%20OS%20Lite%20—%20Acquisition%20Inquiry" style="text-decoration:none;">Inquire Now →</a>
+        <a class="btn btn-ghost" href="/app/">Access Business OS Login</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-section lp-section-dark" id="lp-why">
+    <div class="lp-section-label">Why ELAS Lite</div>
+    <h2 class="lp-section-title">Stop paying for tools.<br>Start owning the system.</h2>
+    <div class="lp-compare">
+      <div class="lp-compare-col lp-compare-old">
+        <div class="lp-compare-label">Building with separate tools</div>
+        <ul>
+          <li>Separate CRM · Project tool · Finance sheet · Messaging app</li>
+          <li>Data in five places, no single view</li>
+          <li>Recurring subscription for every tool</li>
+          <li>Manual commission calculations in spreadsheets</li>
+          <li>No role-based data separation</li>
+          <li>Building integrations takes weeks</li>
+        </ul>
+      </div>
+      <div class="lp-compare-col lp-compare-new">
+        <div class="lp-compare-label">With ELAS Business OS Lite</div>
+        <ul>
+          <li>One system handles all eight modules</li>
+          <li>Single source of truth for everything</li>
+          <li>Pay once, own your OS forever</li>
+          <li>Commission tracked automatically per closer</li>
+          <li>Permissions enforced at the data layer</li>
+          <li>Firebase-backed, deployed and ready in days</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-section" id="lp-faq">
+    <div class="lp-section-label">FAQ</div>
+    <h2 class="lp-section-title">Questions &amp; answers.</h2>
+    <div class="lp-faq-list">
+      <details class="lp-faq-item"><summary>What exactly is ELAS Business OS Lite?<span>+</span></summary><p>ELAS Lite is a one-time-acquisition Business Operating System for agencies and businesses. It includes CRM, lead management, client management, project operations, sales tracking, commission tracking, role-based access control, and Firebase-backed data — all in one unified platform.</p></details>
+      <details class="lp-faq-item"><summary>What is the investment?<span>+</span></summary><p>ELAS Business OS Lite is available for a one-time payment of ₹1,00,000. This covers the complete OS with all modules and initial setup guidance.</p></details>
+      <details class="lp-faq-item"><summary>Who is ELAS Lite for?<span>+</span></summary><p>Agencies, sales businesses, and operations teams that currently manage multiple tools (CRM, project tracker, spreadsheets for commission, etc.) and want a single unified system they own, not rent.</p></details>
+      <details class="lp-faq-item"><summary>How does deployment work?<span>+</span></summary><p>We provide your admin credentials and deployment guidance. Your data lives in your own Firebase project. You have full ownership and control of your infrastructure.</p></details>
+      <details class="lp-faq-item"><summary>How many users can I add?<span>+</span></summary><p>Unlimited users — add as many Admins, Managers, Closers, Delivery Partners, and Clients as your operation requires.</p></details>
+      <details class="lp-faq-item"><summary>Is this a subscription?<span>+</span></summary><p>No. ELAS Lite is a one-time acquisition. After the initial payment, you own your OS. Firebase hosting costs (if any) are separate and minimal.</p></details>
+      <details class="lp-faq-item"><summary>Can I customise modules?<span>+</span></summary><p>The Lite product ships with the eight standard modules as described. Customisation or additional modules can be negotiated as a separate engagement.</p></details>
+      <details class="lp-faq-item"><summary>How do I get started?<span>+</span></summary><p>Email <a href="mailto:getelasos@gmail.com" style="color:var(--accent-2);">getelasos@gmail.com</a> with subject "ELAS Lite Inquiry". We'll respond within one business day.</p></details>
+    </div>
+  </section>
+
+  <section class="lp-section lp-section-dark lp-section-cta">
+    <h2 class="lp-section-title" style="font-size:clamp(24px,4vw,42px);">Ready to own your<br>Business OS?</h2>
+    <p style="color:var(--text-dim);font-size:16px;margin:12px 0 36px;">Stop stitching tools together. Get one system that runs your entire operation.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;">
+      <a class="btn btn-primary" href="mailto:getelasos@gmail.com?subject=ELAS%20Business%20OS%20Lite%20—%20Acquisition%20Inquiry" style="text-decoration:none;">Get ELAS Lite →</a>
+      <a class="btn btn-ghost" href="/app/">Business OS Login</a>
+    </div>
+  </section>
+
+  <footer class="lp-footer">
+    <div class="lp-footer-brand"><strong>ELAS</strong> <span style="color:var(--accent-2);font-size:12px;">Business OS Lite</span></div>
+    <div class="lp-footer-links">
+      <a href="#lp-modules">Modules</a>
+      <a href="#lp-roles">Roles</a>
+      <a href="#lp-pricing">Pricing</a>
+      <a href="#lp-faq">FAQ</a>
+    </div>
+    <div class="lp-footer-contact">
+      <span>getelasos@gmail.com</span>
+      <span>helpgetelasos@gmail.com</span>
+    </div>
+    <p class="lp-footer-copy">© ELAS Business OS Lite · Built for agencies that mean business.</p>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "higgsfield-brandkit": {
+      "source": "higgsfield-ai/skills",
+      "sourceType": "github",
+      "skillPath": "higgsfield-brandkit/SKILL.md",
+      "computedHash": "3c5b83c84675165be9395e01b574b92813385187912bf07cf9e1dceb4d0b67b1"
+    }
+  }
+}

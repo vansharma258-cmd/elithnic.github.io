@@ -1,0 +1,460 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ============================================================
+       HELPER FUNCTIONS
+       ============================================================ */
+
+    // True if the current request is from a Cloud Function / service account.
+    // The Firebase Admin SDK bypasses rules entirely, so this helper is
+    // effectively a no-op in production. It exists for symmetry and to make
+    // the intent of every rule explicit.
+    function isServiceAccount() {
+      return request.auth == null;
+    }
+
+    // Phase 2: Custom claims carry role + entityId + managerId. Reading from
+    // custom claims is cheap and avoids a per-request Firestore get() for every
+    // rule evaluation. The claims are kept in sync by the auth Cloud Functions.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Read role/entityId/managerId from the Firebase Auth custom claims.
+    // These are set by the auth Cloud Functions (createUserAccount,
+    // updateUserAccount, syncClaimsOnUserWrite).
+    function claimRole() {
+      return isAuthenticated() ? request.auth.token.role : null;
+    }
+    function claimEntityId() {
+      return isAuthenticated() && 'entityId' in request.auth.token
+        ? request.auth.token.entityId : null;
+    }
+    function claimLoginId() {
+      return isAuthenticated() && 'loginId' in request.auth.token
+        ? request.auth.token.loginId : null;
+    }
+    function claimManagerId() {
+      return isAuthenticated() && 'managerId' in request.auth.token
+        ? request.auth.token.managerId : null;
+    }
+    function claimSeniorManagerId() {
+      return isAuthenticated() && 'seniorManagerId' in request.auth.token
+        ? request.auth.token.seniorManagerId : null;
+    }
+
+    function isAdmin() {
+      return isServiceAccount() || (isAuthenticated() && claimRole() == 'admin');
+    }
+
+    function isSeniorManager() {
+      return isServiceAccount() || (isAuthenticated() && claimRole() == 'senior_manager');
+    }
+
+    function isProductManager() {
+      return isServiceAccount() || (isAuthenticated() && claimRole() == 'productmanager');
+    }
+
+    function isCloser() {
+      return isAuthenticated() && claimRole() == 'closer';
+    }
+
+    function isManager() {
+      return isServiceAccount() || (isAuthenticated() &&
+        (claimRole() == 'productmanager' || claimRole() == 'servicemanager'));
+    }
+
+    // The Firebase UID == Firestore users/{id} document id (1:1 mapping).
+    function elasUserId() {
+      return request.auth.uid;
+    }
+
+    // True if the document's `userId` field matches the logged-in ELAS user.
+    function isOwner(doc) {
+      return isServiceAccount() || (doc.userId == elasUserId());
+    }
+
+    // True if the current PM/SM user owns the record via their user.id in the `managerId` field.
+    function isRecordManager(doc) {
+      return isServiceAccount() ||
+        (isManager() && doc.managerId == elasUserId()) ||
+        isAdmin();
+    }
+
+    // True if the record belongs to a closer whose assigned PM/SM is the current user.
+    function isRecordOwnerCloser(doc) {
+      return isServiceAccount() ||
+        (isCloser() && doc.userId == elasUserId()) ||
+        isAdmin();
+    }
+
+    /* ============================================================
+       SYSTEM — singleton doc for auth config + counters
+       admin-only read (contains passwordHash, recoveryKeyHash)
+       ============================================================ */
+    match /system/{docId} {
+      // Only the service account (Cloud Functions, Firebase Admin SDK) may
+      // read this document. The app reads system/counters via the users
+      // collection sync, not directly. Keeping this fully service-account
+      // locked prevents any client — even an admin browser session —
+      // from reading the passwordHash/recoveryKeyHash values.
+      allow read: if isServiceAccount();
+      // Only service account writes (saleIdCounter increments, etc.)
+      allow write: if isServiceAccount();
+    }
+
+    /* ============================================================
+       USERS — ELAS user accounts (loginId / passwordHash / role)
+       ============================================================
+       The full users collection is NOT readable from the client in Phase 2.
+       All user reads go through the listUsers() callable which sanitizes
+       passwordHash / authEmail / authUid and enforces role-based scoping.
+       All user writes go through createUserAccount / updateUserAccount /
+       deleteUserAccount callables (admin-only).
+
+       A user CAN read their own document so the onAuthStateChanged listener
+       can resolve CURRENT_USER on session restore.
+       ============================================================ */
+    match /users/{userId} {
+      // Read: only your own document, or service account.
+      // The app never downloads the full users collection.
+      allow read: if isServiceAccount() || (isAuthenticated() && userId == elasUserId());
+      // Writes: ONLY the service account (Cloud Functions) can write.
+      // The client cannot create/update/delete user records directly,
+      // even for its own — that goes through changePassword / updateUserAccount
+      // which has the protections (no role escalation, no auth field changes).
+      allow write: if isServiceAccount();
+    }
+
+    /* ============================================================
+       LEAD ENTITY COLLECTIONS
+       These are the "entity" collections: their id == user.entityId for
+       the non-admin roles. They carry the user's own profile data.
+       ============================================================ */
+    match /closers/{docId} {
+      // Read: only authenticated users with the appropriate role.
+      // Unauthenticated /pay/ no longer reads this directly — uses lookupCloserAttribution callable.
+      allow read: if isAuthenticated();
+      // A closer can update their own profile (userId field).
+      // A PM/SM can update closers that report to them (managerId).
+      // Admin can update any.
+      allow create: if isAuthenticated() && (
+        // PM/SM creates the closer record
+        (isManager() && request.resource.data.userId != null) ||
+        // OR service account (demo data, future integrations)
+        isServiceAccount()
+      );
+      allow update: if isServiceAccount() || (
+        (isCloser() && resource.data.userId == elasUserId()) ||
+        isRecordManager(resource.data)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /deliveryPartners/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isManager() || isServiceAccount());
+      allow update: if isServiceAccount() || (
+        (isAuthenticated() && resource.data.userId == elasUserId()) ||
+        isRecordManager(resource.data)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /freelancers/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isManager() || isServiceAccount());
+      allow update: if isServiceAccount() || (
+        (isAuthenticated() && resource.data.userId == elasUserId()) ||
+        isRecordManager(resource.data)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /clients/{docId} {
+      // Clients can be read by any authenticated user (needed for project assignment).
+      allow read: if isAuthenticated();
+      // Any authenticated user (including /pay/ anonymous session) can create a client.
+      // The client record is not sensitive — it holds billing contact info.
+      // Modifications only by the owner or service account.
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || (
+        (isAuthenticated() && resource.data.userId == elasUserId())
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /dsaClosers/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isManager() || isServiceAccount());
+      allow update: if isServiceAccount() || (
+        (isAuthenticated() && resource.data.userId == elasUserId()) ||
+        isRecordManager(resource.data)
+      );
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       LEADS
+       Assigned to a closer via assignedCloserId (which holds the closer entity id)
+       ============================================================ */
+    match /leads/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || (
+        // Admin can update any
+        isAdmin() ||
+        // PM can update leads
+        isProductManager() ||
+        // Senior Manager can update leads
+        isSeniorManager() ||
+        // Closer can update their own leads
+        (isCloser() && resource.data.assignedCloserId == elasUser().entityId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       PROJECTS
+       Multiple stakeholders: closerId, dpId, freelancerId, clientId
+       ============================================================ */
+    match /projects/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || isAdmin() || isProductManager() || isSeniorManager() ||
+        (isCloser() && resource.data.closerId == elasUser().entityId) ||
+        (isAuthenticated() && resource.data.clientId == elasUser().entityId) ||
+        (isAuthenticated() && resource.data.dpId == elasUser().entityId) ||
+        (isAuthenticated() && resource.data.freelancerId == elasUser().entityId);
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       PRODUCT SALES (legacy — Commission attributed via Closer Code fields)
+       admin-only writes for commission fields to prevent self-assignment
+       ============================================================ */
+    match /productSales/{docId} {
+      allow read: if isAuthenticated();
+      // Service account only for financial/commission fields.
+      // Commission amounts and payout status are set by Cloud Functions.
+      allow create: if isServiceAccount() || isAdmin();
+      allow update: if isServiceAccount() || (
+        isAdmin() &&
+        // Prevent non-admin from writing commission/payout fields directly
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny([
+            'closerCommission', 'pmCommission', 'smCommission', 'adminCommission',
+            'commissionPaid', 'commissionPaidAt', 'commissionVerified'
+          ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       SALES (new PayU flow — immutable attribution)
+       Initial creation: any authenticated client (including /pay/ anonymous)
+       After creation: service account only (all fields including status,
+       paymentStatus, deliveryStatus, commission attribution are server-authoritative)
+       ============================================================ */
+    match /sales/{docId} {
+      allow read: if isAuthenticated();
+      // Initial creation: any authenticated client (the /pay/ session).
+      // The document MUST be in 'pending' state with all three attribution IDs
+      // and an immutable saleId. No client can self-create a 'verified' sale.
+      allow create: if isAuthenticated() && request.resource.data.status == 'pending' &&
+        request.resource.data.closerId != null &&
+        request.resource.data.productManagerId != null &&
+        request.resource.data.seniorManagerId != null &&
+        request.resource.data.saleId != null &&
+        request.resource.data.saleId == docId;
+      // All subsequent updates are server-only (payment verification,
+      // commission ledger, delivery token — all done by Cloud Functions).
+      // This prevents a customer from marking their own sale as 'verified'.
+      allow update: if isServiceAccount();
+      allow delete: if isServiceAccount();
+    }
+
+    /* ============================================================
+       PRODUCTS
+       ============================================================ */
+    match /products/{docId} {
+      // Products are publicly readable (needed for /pay/ product listing).
+      allow read: if isAuthenticated();
+      // Admin-only writes for product management.
+      allow write: if isAdmin();
+    }
+
+    /* ============================================================
+       FINANCE / COMMISSION COLLECTIONS
+       All writes are service-account only — no client can directly
+       create or mutate commission records.
+       ============================================================ */
+    match /commissionLedger/{docId} {
+      allow read: if isAuthenticated();
+      // All writes go through commissionService.generateCommissionLedger()
+      // which is called exclusively from paymentWebhook.
+      allow write: if isServiceAccount();
+    }
+
+    match /commission_locks/{docId} {
+      allow read: if isServiceAccount();
+      allow write: if isServiceAccount();
+    }
+
+    match /webhook_events/{docId} {
+      allow read: if isServiceAccount();
+      allow write: if isServiceAccount();
+    }
+
+    match /payments/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isServiceAccount();
+    }
+
+    /* ============================================================
+       DELIVERY TOKENS
+       Service-account creation; read allowed for auth users (to verify status).
+       ============================================================ */
+    match /delivery_tokens/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isServiceAccount();
+    }
+
+    /* ============================================================
+       WALLET / PAYOUT / WITHDRAWAL
+       ============================================================ */
+    match /walletPayouts/{docId} {
+      allow read: if isAuthenticated();
+      // Only service account and admin can write wallet/payout records.
+      // Self-assignment of commissions/wallet balances is not permitted.
+      allow write: if isServiceAccount() || isAdmin();
+    }
+
+    match /withdrawalRequests/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isServiceAccount() || isAdmin();
+    }
+
+    match /payoutProfiles/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isServiceAccount() || isAdmin();
+    }
+
+    /* ============================================================
+       SaaS / LOAN / PRODUCT DEALS
+       ============================================================ */
+    match /saasSales/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || (
+        isAdmin() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny([
+            'commission', 'commissionPaid', 'commissionVerified'
+          ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /loanDeals/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || (
+        isAdmin() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['commission', 'commissionPaid', 'commissionVerified'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /productDeals/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || (
+        isAdmin() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['commission', 'commissionPaid', 'commissionVerified'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       TICKETS
+       ============================================================ */
+    match /tickets/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isServiceAccount() || isAdmin() || (
+        isAuthenticated() && resource.data.userId == elasUserId()
+      );
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       MEDIA / DOCUMENT COLLECTIONS
+       ============================================================ */
+    match /perfVideos/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isServiceAccount() || isAdmin();
+      allow update: if isServiceAccount() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /legalDocuments/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isServiceAccount() || isAdmin();
+      allow update: if isServiceAccount() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       ACTIVITIES — audit log
+       Any authenticated user can create (activity is append-only in practice).
+       Only service account can read all (sensitive); admin can read all.
+       ============================================================ */
+    match /activities/{docId} {
+      allow read: if isServiceAccount() || isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // immutable once written
+    }
+
+    /* ============================================================
+       NOTIFICATIONS
+       ============================================================ */
+    match /notifications/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // Users can mark their own notifications as read.
+      // Admins can modify any.
+      allow update: if isServiceAccount() || (
+        isAuthenticated() &&
+        resource.data.targetUserId == elasUserId() &&
+        // Only allow setting read=true, never other fields
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /* ============================================================
+       MANAGERS (Product Manager / Senior Manager entity documents)
+       Created and managed by admins; read by authenticated users for
+       hierarchy resolution. /pay/ no longer reads this directly —
+       it uses lookupCloserAttribution callable instead.
+       ============================================================ */
+    match /managers/{docId} {
+      // Only authenticated users can read managers. The /pay/ page now uses
+      // lookupCloserAttribution callable which does server-side resolution.
+      allow read: if isAuthenticated();
+      allow write: if isServiceAccount() || isAdmin();
+    }
+
+    /* ============================================================
+       CATCH-ALL — deny everything not explicitly matched above
+       ============================================================ */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

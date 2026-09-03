@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELAS — Thank You</title>
+<style>
+:root{--bg:#0b0d10;--bg-elev:#13171c;--accent:#7c3aed;--accent-2:#a78bfa;--glass:rgba(20,24,38,0.72);--glass-border:rgba(255,255,255,0.08);--text:#e8eaf0;--text-dim:#9aa3b8;--text-faint:#6b7280;--green:#22c55e;--red:#f87171;--amber:#fbbf24;--radius-lg:18px;--radius-md:14px;--radius-sm:10px;}
+*{box-sizing:border-box;}
+body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter','SF Pro Display',-apple-system,sans-serif;font-size:14px;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.thanks-wrap{max-width:560px;width:100%;}
+.thanks-card{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:40px;backdrop-filter:blur(12px);}
+.thanks-logo{font-size:20px;font-weight:900;letter-spacing:-0.5px;margin-bottom:24px;text-align:center;}
+.thanks-icon{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(34,197,94,0.05));border:2px solid rgba(34,197,94,0.4);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px;}
+.thanks-title{font-size:24px;font-weight:900;text-align:center;margin:0 0 8px;}
+.thanks-sub{font-size:14px;color:var(--text-dim);text-align:center;margin:0 0 28px;}
+.thanks-sale-id{font-family:monospace;font-size:14px;color:var(--accent);font-weight:700;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;display:block;text-align:center;margin-bottom:24px;}
+.thanks-product{font-size:16px;font-weight:700;text-align:center;margin:0 0 4px;}
+.thanks-amount{font-size:32px;font-weight:900;text-align:center;background:linear-gradient(135deg,#7c3aed,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:0 0 20px;}
+.thanks-divider{height:1px;background:var(--glass-border);margin:24px 0;}
+.thanks-delivery{background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:20px;margin-bottom:16px;}
+.delivery-status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:100px;font-size:12px;font-weight:600;}
+.delivery-locked{background:rgba(251,191,36,0.12);color:#fde68a;border:1px solid rgba(251,191,36,0.25);}
+.delivery-authorized{background:rgba(34,197,94,0.12);color:#86efac;border:1px solid rgba(34,197,94,0.25);}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 20px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;cursor:pointer;border:none;transition:all .2s;width:100%;text-decoration:none;text-align:center;}
+.btn-primary{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(124,58,237,0.4);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--glass-border);}
+.thanks-pending{background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:var(--radius-md);padding:16px 18px;margin-bottom:16px;font-size:13.5px;color:#fde68a;}
+.thanks-error{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:var(--radius-md);padding:16px 18px;margin-bottom:16px;font-size:13.5px;color:#fca5a5;}
+.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.footer{text-align:center;margin-top:20px;font-size:12px;color:var(--text-faint);}
+.footer a{color:var(--text-dim);text-decoration:none;}
+@media(max-width:480px){.thanks-card{padding:24px 20px;}}
+</style>
+</head>
+<body>
+<div class="thanks-wrap">
+  <div class="thanks-card">
+    <div class="thanks-logo">ELAS</div>
+    <div id="thanksContent">
+      <div style="text-align:center;padding:40px 0;">
+        <div class="spinner" style="margin:0 auto 16px;border-top-color:var(--accent);"></div>
+        <p style="color:var(--text-dim);font-size:13px;">Verifying your purchase…</p>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><a href="/app/">Business OS Login</a> · <a href="/index/">Home</a></div>
+</div>
+
+<!-- ELAS API base URL — Render backend -->
+<script>
+  window.ELAS_API_BASE = window.ELAS_API_BASE || 'https://elas-api.onrender.com';
+</script>
+<script src="/shared/elasApi.js"></script>
+
+<script>
+/* ===========================================================
+   ELAS — Thank You Page (/thanks/)
+   ===========================================================
+   PUBLIC PAGE — NO Firebase Auth (no anonymous, no signed-in).
+   The customer is not an ELAS user. This page must NOT:
+     - sign in to Firebase Auth
+     - read any Firestore collection directly
+     - access /sales, /users, /closers, /managers, /commissionLedger,
+       /payments, /delivery_tokens from the browser
+     - expose PayU secrets, passwordHash, or hierarchy data
+
+   Server-side verifyPayUPayment callable is the ONLY source of truth.
+   It returns ONLY customer-facing fields. The customer just provides
+   the saleId (or PayU transactionId) — PayU's email/redirect already
+   gave them this.
+   =========================================================== */
+
+/* ---------- Helpers ---------- */
+function escapeHtml(s){
+  if(s===undefined||s===null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtMoney(n){
+  n = Number(n)||0;
+  return '₹' + n.toLocaleString('en-IN',{maximumFractionDigits:0});
+}
+function getQueryParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+/* ---------- Call verifyPayUPayment (Render backend) ----------
+   Server-side verification via window.ELAS_API.verifyPayment.
+   The Render /pay/verify route returns { sale: { ..., verified } }.
+   The downstream render code reads both result.sale and result.verified,
+   so we surface verified at the top level to preserve the existing shape.
+   =========================================================== */
+async function callVerifyPayment(saleId, transactionId){
+  const payload = {};
+  if (saleId) payload.saleId = saleId;
+  if (transactionId) payload.transactionId = transactionId;
+  const res = await window.ELAS_API.verifyPayment(payload);
+  if (res && res.sale) {
+    return { sale: res.sale, verified: !!res.sale.verified, error: res.error };
+  }
+  return { sale: null, verified: false, error: (res && res.error) || 'No payment found' };
+}
+
+/* ---------- Main: verify server-side then render ---------- */
+async function verifyAndRender(){
+  const saleId = getQueryParam('saleId');
+  const transactionId = getQueryParam('txnid') || getQueryParam('transactionId') || getQueryParam('mihpayid');
+  const content = document.getElementById('thanksContent');
+
+  if(!saleId && !transactionId){
+    content.innerHTML = `
+      <div class="thanks-icon" style="background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.3);">!</div>
+      <h2 class="thanks-title">Missing Payment Reference</h2>
+      <p class="thanks-sub">No Sale ID or transaction ID was provided. Please use the link from your payment confirmation email.</p>
+      <a href="/index/" class="btn btn-ghost" style="margin-top:16px;">← Back to Home</a>
+    `;
+    return;
+  }
+
+  let result = null;
+  let serverError = null;
+  try {
+    result = await callVerifyPayment(saleId, transactionId);
+  } catch(e) {
+    console.warn('[Thanks] Server verify failed:', e.message);
+    serverError = e.message;
+  }
+
+  if (!result) {
+    content.innerHTML = `
+      <div class="thanks-icon" style="background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.3);">!</div>
+      <h2 class="thanks-title">Verification Unavailable</h2>
+      <div class="thanks-error">We could not reach our server to verify your payment. Please try again in a moment.</div>
+      <button class="btn btn-ghost" onclick="window.location.reload()" style="margin-top:16px;">Retry</button>
+      <a href="/index/" class="btn btn-ghost" style="margin-top:8px;">← Back to Home</a>
+    `;
+    return;
+  }
+
+  if (!result.sale) {
+    content.innerHTML = `
+      <div class="thanks-icon" style="background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.3);">!</div>
+      <h2 class="thanks-title">Payment Not Found</h2>
+      <div class="thanks-sale-id">${escapeHtml(saleId || transactionId || '')}</div>
+      <div class="thanks-error">${escapeHtml(result.error || 'No payment found with this reference. Contact getelasos@gmail.com if this is unexpected.')}</div>
+      <a href="/index/" class="btn btn-ghost" style="margin-top:16px;">← Back to Home</a>
+    `;
+    return;
+  }
+
+  const saleData = result.sale;
+  const displaySaleId = saleData.saleId || saleId || transactionId;
+  const amount = Number(saleData.amount || 0);
+  const productName = saleData.productName || 'ELAS Business OS';
+
+  if (result.verified) {
+    renderVerified(content, saleData, displaySaleId, productName, amount);
+  } else {
+    renderPending(content, saleData, displaySaleId, productName, amount, serverError);
+  }
+}
+
+/* ---------- Verified UI ---------- */
+function renderVerified(content, sale, saleId, productName, amount){
+  const deliveryStatus = sale.deliveryStatus || 'authorized';
+  let deliveryHTML = '';
+  if(deliveryStatus === 'authorized'){
+    deliveryHTML = `
+      <div class="thanks-delivery">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <strong style="font-size:14px;">Your Product</strong>
+          <span class="delivery-status delivery-authorized">✓ Authorized</span>
+        </div>
+        <p style="color:var(--text-dim);font-size:13px;margin:0 0 14px;">
+          Your purchase is confirmed. Sign in to Business OS to access your product.
+        </p>
+        <a href="/app/" class="btn btn-primary">Open Business OS →</a>
+      </div>
+    `;
+  } else {
+    deliveryHTML = `
+      <div class="thanks-delivery">
+        <strong style="font-size:14px;">Delivery</strong>
+        <p style="color:var(--text-dim);font-size:13px;margin:8px 0 12px;">Product access is being prepared…</p>
+        <a href="/app/" class="btn btn-ghost">Open Business OS</a>
+      </div>
+    `;
+  }
+
+  content.innerHTML = `
+    <div class="thanks-icon">✓</div>
+    <h2 class="thanks-title">Payment Verified!</h2>
+    <p class="thanks-sub">Your order has been confirmed by our server.</p>
+    <div class="thanks-sale-id">Sale ID: ${escapeHtml(saleId)}</div>
+    <p class="thanks-product">${escapeHtml(productName)}</p>
+    <p class="thanks-amount">${fmtMoney(amount)}</p>
+    <div class="thanks-divider"></div>
+    ${deliveryHTML}
+    <div class="thanks-divider"></div>
+    <a href="/index/" class="btn btn-ghost">Back to Home</a>
+    <p style="font-size:11px;color:var(--text-faint);text-align:center;margin:14px 0 0;">Need help? <a href="mailto:getelasos@gmail.com" style="color:var(--text-dim)">getelasos@gmail.com</a></p>
+  `;
+}
+
+/* ---------- Pending UI ---------- */
+function renderPending(content, sale, saleId, productName, amount, serverError){
+  const rawStatus = sale.status || sale.paymentStatus || 'pending';
+  let statusBadge;
+  if(rawStatus === 'paid' || sale.paymentStatus === 'paid' || rawStatus === 'success'){
+    statusBadge = '<span class="delivery-status delivery-authorized">✓ Payment Received — Verifying…</span>';
+  } else {
+    statusBadge = '<span class="delivery-status delivery-locked">⏳ Awaiting Payment</span>';
+  }
+
+  let errorNote = '';
+  if(serverError){
+    errorNote = `<div class="thanks-error" style="font-size:12px;margin-top:12px;">Server check: ${escapeHtml(serverError.slice(0,80))}</div>`;
+  }
+
+  content.innerHTML = `
+    <div class="thanks-icon" style="background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.3);">⏳</div>
+    <h2 class="thanks-title">Payment Processing</h2>
+    <p class="thanks-sub">Your payment is being verified by our server. This page updates automatically.</p>
+    <div class="thanks-sale-id">Sale ID: ${escapeHtml(saleId)}</div>
+    <p class="thanks-product">${escapeHtml(productName)}</p>
+    <p class="thanks-amount" style="font-size:24px;">${fmtMoney(amount)}</p>
+    <div style="text-align:center;margin:16px 0;">${statusBadge}</div>
+    <div class="thanks-pending">
+      <strong>Verification Pending</strong><br>
+      We're confirming your payment with <strong>PayU</strong>. This usually takes 30–60 seconds.
+      <br><br>
+      <strong>Do not close this page</strong> if you have just paid.
+    </div>
+    ${errorNote}
+    <div class="thanks-divider"></div>
+    <button class="btn btn-ghost" onclick="window.location.reload()">Refresh Status</button>
+    <a href="/index/" class="btn btn-ghost" style="margin-top:10px;">Back to Home</a>
+    <p style="font-size:11px;color:var(--text-faint);text-align:center;margin:14px 0 0;">Need help? <a href="mailto:getelasos@gmail.com" style="color:var(--text-dim)">getelasos@gmail.com</a></p>
+  `;
+}
+
+verifyAndRender();
+
+// Auto-refresh every 10s if still pending
+let refreshInterval = setInterval(() => {
+  const title = document.querySelector('.thanks-title');
+  if(title && title.textContent === 'Payment Processing'){
+    verifyAndRender();
+  } else {
+    clearInterval(refreshInterval);
+  }
+}, 10000);
+</script>
+</body>
+</html>

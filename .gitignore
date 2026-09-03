@@ -1,0 +1,19 @@
+# Linux home/config files
+.*
+!.gitignore
+
+# Dependencies
+node_modules/
+
+# Environment/secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Firebase service-account credentials
+*-firebase-adminsdk-*.json
+
+# Temporary files
+*.log
+*.tmp
