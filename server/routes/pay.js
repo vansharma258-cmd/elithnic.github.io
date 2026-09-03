@@ -98,7 +98,7 @@ router.post('/closer', async (req, res, next) => {
       return res.json({ valid: false, error: 'This Closer is not yet assigned to a manager.' });
     }
 
-    const pmDoc = await db.collection('managers').doc(pmId).get();
+    const pmDoc = await db.collection('users').doc(pmId).get();
     if (!pmDoc.exists) {
       return res.json({ valid: false, error: 'Product Manager not found.' });
     }
@@ -109,7 +109,7 @@ router.post('/closer', async (req, res, next) => {
       return res.json({ valid: false, error: "Manager has no Senior Manager assigned." });
     }
 
-    const smDoc = await db.collection('managers').doc(smId).get();
+    const smDoc = await db.collection('users').doc(smId).get();
     if (!smDoc.exists) {
       return res.json({ valid: false, error: 'Senior Manager not found.' });
     }
@@ -211,7 +211,7 @@ router.post('/prepare-sale', async (req, res, next) => {
         return res.json({ success: false, error: 'Closer is not assigned to a Product Manager. Ask your manager to assign you one.' });
       }
 
-      const pmSnap = await db.collection('managers').doc(pmId).get();
+      const pmSnap = await db.collection('users').doc(pmId).get();
       if (!pmSnap.exists) {
         return res.json({ success: false, error: 'Product Manager not found' });
       }
@@ -510,14 +510,14 @@ router.post('/sale', async (req, res, next) => {
       return res.json({ success: false, error: 'Closer not assigned to a manager' });
     }
 
-    const pmDoc = await db.collection('managers').doc(pmId).get();
+    const pmDoc = await db.collection('users').doc(pmId).get();
     if (!pmDoc.exists) return res.json({ success: false, error: 'Product Manager not found' });
     const pm = pmDoc.data();
 
     const smId = pm.seniorManagerId;
     if (!smId) return res.json({ success: false, error: "Manager has no Senior Manager assigned" });
 
-    const smDoc = await db.collection('managers').doc(smId).get();
+    const smDoc = await db.collection('users').doc(smId).get();
     if (!smDoc.exists) return res.json({ success: false, error: 'Senior Manager not found' });
 
     // 2. Load product

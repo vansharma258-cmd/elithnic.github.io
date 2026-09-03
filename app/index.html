@@ -6213,9 +6213,13 @@ async function submitAssignSenior(userId){
 }
 async function submitAssignManager(userId){
   const u = getById('users', userId);
-  if(!u || !u.entityId) return;
+  if(!u || !u.entityId){
+    toast('Closer has no entity record — cannot assign manager', 'error'); return;
+  }
   const entity = getById('closers', u.entityId);
-  if(!entity) return;
+  if(!entity){
+    toast('Closer entity not found — assignment failed', 'error'); return;
+  }
   const newManagerId = document.getElementById('hierManagerId').value || null;
   // Closer.managerId is on the entity record, not the user — direct Firestore write
   // is allowed because the rules permit PM/SM to update their reports (isRecordManager).
