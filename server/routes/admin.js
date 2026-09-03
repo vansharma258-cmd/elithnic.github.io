@@ -144,7 +144,6 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: caller.id,
       migratedToFirebaseAuth: true,
-      passwordHash: admin.firestore.FieldValue.delete(),
     };
 
     await db.collection('users').doc(userId).set(userDoc);

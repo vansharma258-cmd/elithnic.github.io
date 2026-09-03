@@ -828,6 +828,7 @@ table.data-table tbody tr:last-child td{border-bottom:none;}
       <section class="view-section" id="view-mywallet"></section>
       <section class="view-section" id="view-saassales"></section>
       <section class="view-section" id="view-mysaassales"></section>
+      <section class="view-section" id="view-paymentlinks"></section>
     </main>
   </div>
 </div>
@@ -1796,7 +1797,8 @@ const NAV_CONFIG = {
     ]},
     {group:'Sales', items:[
       {view:'myleads', ic:'◎', label:'My Leads'},
-      {view:'mydeals', ic:'$', label:'My Deals & Commission'}
+      {view:'mydeals', ic:'$', label:'My Deals & Commission'},
+      {view:'paymentlinks', ic:'🔗', label:'Payment Links'}
     ]},
     {group:'Marketplace', items:[
       {view:'myproducts', ic:'⊞', label:'My Products'}
@@ -1901,7 +1903,8 @@ const VIEW_META = {
   payouts:{title:'Closer Payouts', sub:'Real wallet balances for every hybrid closer — log a payout once you\'ve actually sent the money'},
   mywallet:{title:'My Wallet', sub:'Your real earnings and payout history'},
   saassales:{title:'SaaS Sales', sub:'Deals where the customer pays you directly for the SaaS product — confirm payment to credit closer commission'},
-  mysaassales:{title:'My SaaS Sales', sub:'Sales you\'ve closed for the SaaS product and their status'}
+  mysaassales:{title:'My SaaS Sales', sub:'Sales you\'ve closed for the SaaS product and their status'},
+  paymentlinks:{title:'Payment Links', sub:'Generate secure payment links for your customers — commission is attributed automatically'}
 };
 
 function navigateTo(view){
@@ -3987,6 +3990,228 @@ function renderMySaasSalesView(){
   if(!deals.length){ wrap.innerHTML = emptyState('💻','No sales yet','Log your first SaaS sale.'); return; }
   wrap.innerHTML = saasSalesTableHTML(deals, true, true);
 }
+
+/* ---------- Payment Links (closer-initiated Sale ID flow) ----------
+   A Closer fills in product + customer details → server creates a pending
+   sale (SALE-XXXX) with locked Closer→PM→SM attribution derived from
+   the authenticated user's identity. The server returns a payment URL:
+     https://getelasos.com/pay/?saleId=SALE-XXXX
+   which the Closer shares with the customer.
+   =========================================================== */
+let _plProductsCache = null;
+
+async function renderPaymentLinksView(){
+  const root = document.getElementById('view-paymentlinks');
+  root.innerHTML = `
+    <div class="panel glass">
+      <div class="panel-head">
+        <div class="panel-title">Payment Links</div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:-4px 0 14px;">
+        Create a payment link for your customer. Once the customer completes payment, your commission
+        is attributed automatically. You (your PM and your SM) are derived from your account on the
+        server — they cannot be changed.
+      </p>
+
+      <div class="panel" style="background:rgba(255,255,255,0.02);">
+        <div class="form-grid2">
+          <div class="field">
+            <label>Product *</label>
+            <select id="pl_product"><option value="">Loading products…</option></select>
+          </div>
+          <div class="field">
+            <label>Customer name *</label>
+            <input type="text" id="pl_custName" placeholder="Customer's full name" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Customer email *</label>
+            <input type="email" id="pl_custEmail" placeholder="For payment receipt" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Customer phone *</label>
+            <input type="tel" id="pl_custPhone" placeholder="+91 …" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Company (optional)</label>
+            <input type="text" id="pl_custCompany" placeholder="Customer's company" autocomplete="off">
+          </div>
+        </div>
+        <div class="field-err" id="plError" style="display:none;margin-top:10px;"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-primary" id="plCreateBtn" onclick="handleCreatePaymentLink()">
+            Generate Payment Link
+          </button>
+          <button class="btn btn-ghost" onclick="renderPaymentLinksView()">Reset</button>
+        </div>
+      </div>
+
+      <div id="plResult" style="display:none;margin-top:18px;"></div>
+
+      <div style="margin-top:24px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:var(--text-faint);line-height:1.6;">
+        <strong style="color:var(--text-dim);">How it works:</strong>
+        <ol style="margin:6px 0 0 18px;padding:0;">
+          <li>You create a payment link with the product and customer details.</li>
+          <li>The server creates a pending sale with your attribution locked in (you → your PM → your SM).</li>
+          <li>You share the link with your customer (WhatsApp, email, SMS).</li>
+          <li>Customer pays through PayU. Once verified, your commission is credited automatically.</li>
+        </ol>
+      </div>
+    </div>
+  `;
+  await loadProductsForPaymentLink();
+}
+
+async function loadProductsForPaymentLink(){
+  const sel = document.getElementById('pl_product');
+  if (!sel) return;
+  if (!window.ELAS_API) {
+    sel.innerHTML = '<option value="">Connection required to load products</option>';
+    return;
+  }
+  try {
+    const res = await window.ELAS_API.listProducts();
+    const products = (res && res.products) || [];
+    _plProductsCache = products;
+    if (!products.length) {
+      sel.innerHTML = '<option value="">No active products available</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Select product</option>' +
+      products.map(p => {
+        const price = Number(p.price||0);
+        const label = `${escapeHtml(p.name||'Product')} — ₹${price.toLocaleString('en-IN')}`;
+        return `<option value="${escapeHtml(p.id)}">${label}</option>`;
+      }).join('');
+  } catch (e) {
+    console.error('[loadProductsForPaymentLink]', e);
+    sel.innerHTML = '<option value="">Could not load products</option>';
+  }
+}
+
+async function handleCreatePaymentLink(){
+  const productId = (document.getElementById('pl_product') || {}).value;
+  const name = ((document.getElementById('pl_custName') || {}).value || '').trim();
+  const email = ((document.getElementById('pl_custEmail') || {}).value || '').trim();
+  const phone = ((document.getElementById('pl_custPhone') || {}).value || '').trim();
+  const company = ((document.getElementById('pl_custCompany') || {}).value || '').trim();
+  const err = document.getElementById('plError');
+  const btn = document.getElementById('plCreateBtn');
+  const result = document.getElementById('plResult');
+
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (result) result.style.display = 'none';
+
+  if (!productId || !name || !email || !phone) {
+    if (err) {
+      err.textContent = 'Please fill all required fields (product, name, email, phone).';
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  // Basic email format check (server is the source of truth)
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    if (err) {
+      err.textContent = 'Please enter a valid email address.';
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  if (!window.ELAS_API || !window.ELAS_API.prepareSale) {
+    if (err) {
+      err.textContent = 'Connection required. Please reload when online.';
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+
+  try {
+    const data = await window.ELAS_API.prepareSale({
+      productId,
+      customer: { name, email, phone, company }
+    });
+
+    if (!data || !data.success || !data.saleId || !data.paymentUrl) {
+      throw new Error((data && data.error) || 'Failed to create payment link');
+    }
+
+    // Show success result
+    if (result) {
+      result.innerHTML = `
+        <div class="panel" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.25);">
+          <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--green);">
+            ✓ Payment Link Generated
+          </div>
+          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:6px;">
+            Sale ID: <strong style="color:var(--accent);font-family:monospace;letter-spacing:1px;">${escapeHtml(data.saleId)}</strong>
+          </div>
+          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">
+            Product: <strong>${escapeHtml(data.productName||'')}</strong> — ${fmtMoneyINR(data.amount||0)}
+          </div>
+          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">
+            Share this link with your customer:
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" readonly value="${escapeHtml(data.paymentUrl)}"
+              id="plUrlInput"
+              style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:var(--text);font-size:12px;font-family:monospace;"
+              onclick="this.select()">
+            <button class="btn btn-primary btn-sm" onclick="copyPaymentUrl()">Copy</button>
+          </div>
+          <div id="plCopyConfirm" style="font-size:11.5px;color:var(--green);margin-top:8px;display:none;">
+            ✓ Copied to clipboard
+          </div>
+        </div>
+      `;
+      result.style.display = 'block';
+    }
+
+    toast('Payment link created', 'success');
+  } catch (e) {
+    console.error('[handleCreatePaymentLink]', e);
+    if (err) {
+      err.textContent = e.message || 'Failed to create payment link. Please try again.';
+      err.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate Payment Link'; }
+  }
+}
+
+function copyPaymentUrl(){
+  const input = document.getElementById('plUrlInput');
+  const confirm = document.getElementById('plCopyConfirm');
+  if (!input) return;
+  input.select();
+  input.setSelectionRange(0, 99999);
+  const url = input.value;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      if (confirm) { confirm.style.display = 'block'; setTimeout(() => { confirm.style.display = 'none'; }, 2200); }
+    }).catch(() => fallbackCopy(input, confirm));
+  } else {
+    fallbackCopy(input, confirm);
+  }
+}
+
+function fallbackCopy(input, confirm){
+  try {
+    document.execCommand('copy');
+    if (confirm) { confirm.style.display = 'block'; setTimeout(() => { confirm.style.display = 'none'; }, 2200); }
+  } catch(e) {
+    toast('Copy failed. Please select the link and copy manually.', 'error');
+  }
+}
+
+// Local helpers used by the Payment Links view
+function fmtMoneyINR(n){
+  const num = Number(n) || 0;
+  return '₹' + num.toLocaleString('en-IN');
+}
+
 function renderSaasSalesList(){
   const rows = getAll('saasSales').slice().sort((a,b)=> new Date(b.createdDate)-new Date(a.createdDate));
   const wrap = document.getElementById('saasSalesWrap');
@@ -7161,7 +7386,8 @@ const RENDER_MAP = {
   payouts: renderPayoutsView,
   mywallet: renderMyWalletView,
   saassales: renderSaasSalesView,
-  mysaassales: renderMySaasSalesView
+  mysaassales: renderMySaasSalesView,
+  paymentlinks: renderPaymentLinksView
 };
 function renderAll(){
   if(!CURRENT_USER) return;

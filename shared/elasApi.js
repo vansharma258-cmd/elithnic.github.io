@@ -127,6 +127,8 @@
     listProducts:   () => callApi('/pay/products', null, { method: 'GET' }),
     lookupCloser:   (data) => callApi('/pay/closer', data),
     createSale:     (data) => callApi('/pay/sale', data),
+    prepareSale:    (data) => callApi('/pay/prepare-sale', data, { auth: true }),
+    getSale:        (saleId) => callApi('/pay/sale/' + encodeURIComponent(saleId), null, { method: 'GET' }),
     verifyPayment:  (data) => callApi('/pay/verify', data),
     listUsers:      () => callApi('/admin/users', null, { method: 'GET', auth: true }),
     createUser:     (data) => callApi('/admin/users', data, { auth: true }),

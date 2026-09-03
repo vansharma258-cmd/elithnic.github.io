@@ -130,13 +130,348 @@ router.post('/closer', async (req, res, next) => {
 });
 
 // ============================================================
+// POST /pay/prepare-sale
+// Authenticated closer creates a pending sale with locked attribution.
+// The client opens /pay/?saleId=SALE-ID and completes payment.
+// ============================================================
+router.post('/prepare-sale', async (req, res, next) => {
+  try {
+    const { productId, customer } = req.body || {};
+
+    if (!productId || typeof productId !== 'string') {
+      return res.status(400).json({ error: 'productId is required' });
+    }
+
+    // Customer pre-fill is optional — if provided, it must include the
+    // minimal identifying fields. If missing, the client fills them on /pay/.
+    let custName = null, custEmail = null, custPhone = null, custCompany = '';
+    if (customer && typeof customer === 'object') {
+      custName = (customer.name || '').toString().trim() || null;
+      custEmail = (customer.email || '').toString().trim() || null;
+      custPhone = (customer.phone || '').toString().trim() || null;
+      custCompany = (customer.company || '').toString().trim() || '';
+    }
+
+    // Require auth — only closers (or admins/senior managers) can initiate sales
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    let authUid;
+    try {
+      const adminSdk = require('firebase-admin');
+      const decoded = await adminSdk.auth().verifyIdToken(authHeader.slice(7));
+      authUid = decoded.uid;
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const db = admin.firestore();
+
+    // Resolve the authenticated user → their entityId → closer entity
+    const userDoc = await db.collection('users').doc(authUid).get();
+    if (!userDoc.exists) {
+      return res.status(403).json({ error: 'User account not found' });
+    }
+    const userData = userDoc.data();
+    const role = userData.role || '';
+    const entityId = userData.entityId || null;
+
+    // Only closers (and admins/senior managers for testing) can create payment links.
+    // Admins and senior managers can create links without their own closer attribution
+    // (attributionless sales are still valid — commission goes to whoever is linked).
+    // Closers must have an entityId pointing to their closer record.
+    const isPrivileged = ['admin', 'senior_manager'].includes(role);
+    const isCloser = role === 'closer' && entityId;
+
+    if (!isPrivileged && !isCloser) {
+      return res.status(403).json({ error: 'Only Closers can create payment links' });
+    }
+
+    // For closers: resolve their PM and SM from their entity record.
+    // For admins/senior managers: we can still create the sale without attribution
+    // (the commission field will be 0 until admin assigns attribution).
+    let closerId = null;
+    let closerDocRef = null;
+    let pmId = null;
+    let smId = null;
+
+    if (isCloser) {
+      closerDocRef = db.collection('closers').doc(entityId);
+      const closerSnap = await closerDocRef.get();
+      if (!closerSnap.exists) {
+        return res.status(403).json({ error: 'Closer record not found' });
+      }
+      const closer = closerSnap.data();
+      closerId = entityId;
+
+      pmId = closer.assignedManagerId || closer.managerId;
+      if (!pmId) {
+        return res.json({ success: false, error: 'Closer is not assigned to a Product Manager. Ask your manager to assign you one.' });
+      }
+
+      const pmSnap = await db.collection('managers').doc(pmId).get();
+      if (!pmSnap.exists) {
+        return res.json({ success: false, error: 'Product Manager not found' });
+      }
+      const pm = pmSnap.data();
+      smId = pm.seniorManagerId;
+      if (!smId) {
+        return res.json({ success: false, error: 'Product Manager has no Senior Manager assigned' });
+      }
+    }
+
+    // Load product server-side — never trust browser-supplied price
+    const productDoc = await db.collection('products').doc(productId).get();
+    if (!productDoc.exists) {
+      return res.json({ success: false, error: 'Product not found' });
+    }
+    const product = productDoc.data();
+    const amount = Number(product.price);
+    if (!amount || amount <= 0) {
+      return res.json({ success: false, error: 'Product has no valid price' });
+    }
+    if (product.status && product.status !== 'active') {
+      return res.json({ success: false, error: 'Product is not available' });
+    }
+
+    // Generate cryptographically strong unique Sale ID
+    const sysRef = db.collection('system').doc('counters');
+    const saleIdCounter = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(sysRef);
+      const data = snap.exists ? snap.data() : {};
+      const next = (data.saleIdCounter || 1000) + 1;
+      tx.set(sysRef, { saleIdCounter: next }, { merge: true });
+      return next;
+    });
+    const saleId = 'SALE-' + saleIdCounter;
+
+    const now = new Date().toISOString();
+
+    // Build the pending sale record with immutable attribution
+    const sale = {
+      id: saleId,
+      saleId,
+      clientId: null,
+      productId: product.id,
+      productName: product.name,
+      amount,
+      currency: 'INR',
+      status: 'pending',
+      paymentStatus: 'pending',
+      deliveryStatus: 'locked',
+      // Attribution — locked server-side, never from browser
+      closerId: closerId,
+      closerCode: closerDocRef ? (closerSnap.data().closerId || null) : null,
+      productManagerId: pmId,
+      seniorManagerId: smId,
+      // Customer fields — can be pre-filled if provided, otherwise client fills on /pay/
+      customerName: custName,
+      customerEmail: custEmail,
+      customerPhone: custPhone,
+      customerCompany: custCompany,
+      createdAt: now,
+      source: 'closer-link',
+      saleInitiatedBy: authUid,   // auth UID of the user who created this
+      paymentInitiatedAt: null,
+      paidAt: null,
+      gatewaySessionId: null,
+    };
+
+    await db.collection('sales').doc(saleId).set(sale);
+
+    const frontendBase = process.env.FRONTEND_URL || 'https://getelasos.com';
+    const paymentUrl = `${frontendBase}/pay/?saleId=${encodeURIComponent(saleId)}`;
+
+    console.log(`[prepare-sale] Created pending sale ${saleId} for product ${product.id} by ${authUid}`);
+
+    return res.json({
+      success: true,
+      saleId,
+      productName: product.name,
+      amount,
+      currency: 'INR',
+      paymentUrl,
+    });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
+// GET /pay/sale/:saleId
+// Public: load an existing pending sale for /pay/?saleId=
+// Returns ONLY customer-safe fields. Never exposes attribution IDs,
+// commission data, delivery tokens, or internal state.
+// ============================================================
+router.get('/sale/:saleId', async (req, res, next) => {
+  try {
+    const { saleId } = req.params;
+
+    // Validate Sale ID format: must match SALE-NUMBER
+    if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
+      return res.status(400).json({ error: 'Invalid sale reference' });
+    }
+
+    const db = admin.firestore();
+    const saleSnap = await db.collection('sales').where('saleId', '==', saleId).limit(1).get();
+
+    if (saleSnap.empty) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    const sale = saleSnap.docs[0].data();
+
+    // Only return data for pending/unpaid sales.
+    // If already paid/verified, return a helpful message without exposing sensitive state.
+    if (sale.status === 'verified' || sale.paymentStatus === 'verified') {
+      return res.json({
+        saleId: sale.saleId,
+        status: 'already_paid',
+        message: 'This payment has already been completed.',
+      });
+    }
+
+    if (sale.status === 'failed' || sale.paymentStatus === 'failed') {
+      return res.json({
+        saleId: sale.saleId,
+        status: 'payment_failed',
+        message: 'This payment attempt was not successful. Please contact support.',
+      });
+    }
+
+    // Return ONLY what the /pay/ page needs to display to the client
+    return res.json({
+      saleId: sale.saleId,
+      productName: sale.productName || null,
+      amount: sale.amount || null,
+      currency: sale.currency || 'INR',
+      status: sale.status || 'pending',
+      closerName: sale.closerCode || null,  // display name only (the closerId string like "CL01")
+    });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
 // POST /pay/sale
-// createPayUSale replacement — full server-side checkout
+// createPayUSale replacement — full server-side checkout.
+// Handles TWO paths:
+//   1. Client payment completion for a pre-created pending sale (?saleId present)
+//   2. Legacy direct checkout (no saleId — client types closer code)
 // ============================================================
 router.post('/sale', async (req, res, next) => {
   try {
-    const { productId, closerCode, customer } = req.body || {};
+    const { saleId: inputSaleId, productId, closerCode, customer } = req.body || {};
 
+    // PATH A: Pre-created sale from a closer-generated payment link
+    if (inputSaleId && typeof inputSaleId === 'string') {
+      const db = admin.firestore();
+      const saleSnap = await db.collection('sales').where('saleId', '==', inputSaleId).limit(1).get();
+
+      if (saleSnap.empty) {
+        return res.json({ success: false, error: 'Sale not found. Please use the payment link provided by your Closer.' });
+      }
+
+      const saleDoc = saleSnap.docs[0];
+      const sale = saleDoc.data();
+
+      if (sale.status === 'verified' || sale.paymentStatus === 'verified') {
+        return res.json({ success: false, error: 'This payment has already been completed.' });
+      }
+
+      if (sale.status !== 'pending' && sale.paymentStatus !== 'pending') {
+        return res.json({ success: false, error: 'This sale cannot accept a new payment attempt.' });
+      }
+
+      // Load product server-side to get the locked amount
+      if (!sale.productId) {
+        return res.json({ success: false, error: 'Sale has no associated product. Contact support.' });
+      }
+      const productDoc = await db.collection('products').doc(sale.productId).get();
+      if (!productDoc.exists) {
+        return res.json({ success: false, error: 'Product no longer available. Contact support.' });
+      }
+      const product = productDoc.data();
+      const amount = Number(product.price);
+      if (!amount || amount <= 0) {
+        return res.json({ success: false, error: 'Product has no valid price. Contact support.' });
+      }
+
+      // Validate customer fields
+      if (!customer || !customer.name || !customer.email || !customer.phone) {
+        return res.json({ success: false, error: 'Customer name, email, and phone are required.' });
+      }
+
+      // Update the sale with customer details and create/find client
+      const clientId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await db.collection('clients').doc(clientId).set({
+        id: clientId,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        company: customer.company || '',
+        status: 'active',
+        createdDate: new Date().toISOString().slice(0, 10),
+      }, { merge: true });
+
+      await saleDoc.ref.update({
+        clientId,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        customerCompany: customer.company || '',
+        status: 'pending',
+        paymentStatus: 'pending',
+      });
+
+      // Create PayU session using the server-stored amount
+      if (!payu.isConfigured()) {
+        return res.json({ success: false, error: 'Payment is not configured. Contact support.' });
+      }
+
+      const apiBase = process.env.API_BASE_URL || `https://elas-api.onrender.com`;
+      const callbackUrl = process.env.PAYU_CALLBACK_URL || `${apiBase}/webhook/payu`;
+      const successUrl = process.env.PAYU_SUCCESS_URL || `https://getelasos.com/thanks/?saleId=${encodeURIComponent(inputSaleId)}`;
+      const failureUrl = process.env.PAYU_FAILURE_URL || `${apiBase}/pay/?saleId=${encodeURIComponent(inputSaleId)}`;
+
+      const session = await payu.createSession({
+        amount,
+        currency: 'INR',
+        productinfo: product.name,
+        firstname: (customer.name || 'Customer').split(' ')[0],
+        email: customer.email,
+        phone: customer.phone,
+        saleId: inputSaleId,
+        callbackUrl,
+        successUrl,
+        failureUrl,
+      });
+
+      await saleDoc.ref.update({
+        gatewaySessionId: session.txnid,
+        paymentInitiatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return res.json({
+        success: true,
+        saleId: inputSaleId,
+        productName: product.name,
+        amount,
+        currency: 'INR',
+        txnid: session.txnid,
+        gateway: session.gateway,
+        environment: session.environment,
+        paymentUrl: session.paymentUrl,
+        params: session.params,
+      });
+    }
+
+    // PATH B: Legacy direct checkout — client types closer code manually
     if (!productId || typeof productId !== 'string') {
       return res.status(400).json({ error: 'productId is required' });
     }
