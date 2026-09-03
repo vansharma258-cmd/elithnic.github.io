@@ -173,11 +173,7 @@ router.post('/login', async (req, res, next) => {
           });
         } else {
           console.error('[auth/login] Migration failed for', normalizedLoginId, err.code, err.message);
-          return res.status(500).json({
-            error: 'Account migration failed. Please contact support.',
-            diagnosticCode: err.code || 'NO_ERROR_CODE',
-            diagnosticMessage: err.message || 'NO_ERROR_MESSAGE'
-          });
+          return res.status(500).json({ error: 'Account migration failed. Please contact support.' });
         }
       }
 

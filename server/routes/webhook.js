@@ -54,16 +54,34 @@ router.post('/payu', async (req, res) => {
   const db = admin.firestore();
   const eventId = parsed.transactionId + ':' + parsed.gatewayEventId;
 
-  // 3. Idempotency check — record this webhook event
+  // 3. Idempotency lock — atomic create-once.
+  // create() fails with ALREADY_EXISTS if a concurrent webhook already wrote
+  // the lock. This prevents duplicate commission and duplicate delivery token
+  // when PayU sends overlapping callbacks. If the create throws any other
+  // error (transient), we fall through and let the side-effect idempotency
+  // (commission_locks, used:true) act as a second line of defense.
   const eventRef = db.collection('webhook_events').doc(eventId);
+  let idempotencyLocked = false;
   try {
-    const eventSnap = await eventRef.get();
-    if (eventSnap.exists) {
-      console.log(`[PayU Webhook] Duplicate event ${eventId} — skipping`);
+    await eventRef.create({
+      id: eventId,
+      saleId: parsed.saleId,
+      transactionId: parsed.transactionId,
+      status: parsed.status,
+      amount: parsed.amount,
+      gatewayEventId: parsed.gatewayEventId,
+      mode: parsed.mode,
+      bankRefNum: parsed.bankRefNum,
+      receivedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    idempotencyLocked = true;
+  } catch (lockErr) {
+    if (lockErr && lockErr.code === 6) { // ALREADY_EXISTS
+      console.log(`[PayU Webhook] Duplicate event ${eventId} — skipping side effects`);
       return res.status(200).json({ success: true, idempotent: true });
     }
-  } catch (e) {
-    // continue; better to risk double processing than to miss a payment
+    // Transient error — log and continue. Side-effect idempotency still applies.
+    console.warn(`[PayU Webhook] Idempotency lock write failed: ${lockErr.message}`);
   }
 
   // 4. Find the sale
@@ -82,18 +100,7 @@ router.post('/payu', async (req, res) => {
   // 5. Process the payment outcome
   const isSuccess = parsed.status === payu.PAYU_STATUS_SUCCESS;
 
-  // Record the webhook event first (idempotency lock)
-  await eventRef.set({
-    id: eventId,
-    saleId: parsed.saleId,
-    transactionId: parsed.transactionId,
-    status: parsed.status,
-    amount: parsed.amount,
-    gatewayEventId: parsed.gatewayEventId,
-    mode: parsed.mode,
-    bankRefNum: parsed.bankRefNum,
-    receivedAt: admin.firestore.FieldValue.serverTimestamp()
-  });
+  // Note: event audit record + idempotency lock already written at step 3.
 
   if (!isSuccess) {
     console.log(`[PayU Webhook] Non-success status: ${parsed.status} for sale ${parsed.saleId}`);

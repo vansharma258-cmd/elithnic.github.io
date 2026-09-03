@@ -7,12 +7,21 @@
 const express = require('express');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 
 const payu = require('../shared/paymentService');
 const { generateCommissionLedger } = require('../shared/commissionService');
-const { generateDeliveryToken } = require('../shared/deliveryService');
+const { generateDeliveryToken, generateDeliveryClaim, consumeDeliveryClaim } = require('../shared/deliveryService');
 const { requireAuth } = require('./auth');
+
+const deliveryClaimLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
 
 // ============================================================
 // GET /pay/products
@@ -273,6 +282,12 @@ router.post('/sale', async (req, res, next) => {
 // ============================================================
 // POST /pay/verify
 // verifyPayUPayment replacement
+//
+// SECURITY: A claim is issued ONLY after a successful server-side
+// PayU verify_payment API call for the SERVER-STORED gatewaySessionId.
+// The browser-supplied saleId/transactionId is used ONLY for sale lookup.
+// Firestore sale.status === "verified" is NOT trusted as requester
+// authorization — it is server-side payment state from a prior flow.
 // ============================================================
 router.post('/verify', async (req, res, next) => {
   try {
@@ -283,24 +298,27 @@ router.post('/verify', async (req, res, next) => {
       return res.json({ sale: null, error: 'saleId or transactionId is required' });
     }
 
+    // Step 1: Look up the sale by saleId, or by the server-stored
+    // gatewaySessionId (which is what the browser may call "transactionId").
+    // The browser-supplied transactionId is used ONLY as a lookup key into
+    // our own Firestore; it is NEVER the txnid sent to PayU.
     let saleData = null;
-    let saleDocRef = null;
 
     if (saleId) {
       const snap = await db.collection('sales').where('saleId', '==', saleId).limit(1).get();
       if (!snap.empty) {
-        const d = snap.docs[0];
-        saleData = { id: d.id, ...d.data() };
-        saleDocRef = d.ref;
+        saleData = { id: snap.docs[0].id, ...snap.docs[0].data() };
       }
     }
 
     if (!saleData && transactionId) {
+      // Look up by stored gatewaySessionId — this confirms the
+      // transactionId the browser supplied is one that THIS server
+      // previously sent to PayU for THIS sale. It does not prove
+      // payment on its own.
       const snap = await db.collection('sales').where('gatewaySessionId', '==', transactionId).limit(1).get();
       if (!snap.empty) {
-        const d = snap.docs[0];
-        saleData = { id: d.id, ...d.data() };
-        saleDocRef = d.ref;
+        saleData = { id: snap.docs[0].id, ...snap.docs[0].data() };
       }
     }
 
@@ -308,32 +326,148 @@ router.post('/verify', async (req, res, next) => {
       return res.json({ sale: null, error: 'No payment found with this reference. Contact getelasos@gmail.com if this is unexpected.' });
     }
 
-    let verified = saleData.status === 'verified' || saleData.paymentStatus === 'verified';
+    // Step 2: Require a server-stored gatewaySessionId. Without it we
+    // cannot call PayU's verify_payment API. A sale that has no
+    // gatewaySessionId was never sent to PayU by this server.
+    const storedTxnid = saleData.gatewaySessionId;
+    if (!storedTxnid || typeof storedTxnid !== 'string') {
+      return res.json({ sale: null, error: 'Payment reference is invalid. Please retry from the checkout page.' });
+    }
 
-    // If pending, do a server-side check with PayU
-    if (!verified) {
+    // Step 3: ALWAYS call PayU's verify_payment API. Use ONLY the
+    // server-stored gatewaySessionId. The result is the only thing
+    // that can authorize a delivery claim.
+    let payuResult;
+    try {
+      payuResult = await payu.verifyPaymentServerSide({ txnid: storedTxnid });
+    } catch (e) {
+      // Network error, timeout, or invalid response from PayU.
+      // Do NOT fall back to Firestore status. Do NOT issue a claim.
+      console.warn('[verifyPayUPayment] PayU verify_payment API error:', e.message);
+      return res.json({
+        sale: {
+          saleId: saleData.saleId,
+          status: saleData.status,
+          paymentStatus: saleData.paymentStatus,
+        },
+        verified: false,
+        claimToken: null,
+        claimExpiresAt: null,
+        error: 'Payment verification is temporarily unavailable. Please try again in a moment.',
+      });
+    }
+
+    // Step 4: Validate the PayU response corresponds to THIS sale's
+    // stored transaction, with a successful payment, and a matching amount.
+    const txnDetails = payuResult && payuResult.transaction_details
+      ? (payuResult.transaction_details[storedTxnid] || null)
+      : null;
+
+    if (!txnDetails) {
+      // PayU did not return a record for the txnid we asked about.
+      return res.json({
+        sale: {
+          saleId: saleData.saleId,
+          status: saleData.status,
+          paymentStatus: saleData.paymentStatus,
+        },
+        verified: false,
+        claimToken: null,
+        claimExpiresAt: null,
+        error: 'No payment found. Please retry from the checkout page.',
+      });
+    }
+
+    // PayU success semantics: status field of the per-transaction record
+    // is the string "success" for a successful payment. This matches the
+    // webhook's existing validation (`parsed.status === payu.PAYU_STATUS_SUCCESS`).
+    if (txnDetails.status !== 'success') {
+      return res.json({
+        sale: {
+          saleId: saleData.saleId,
+          status: saleData.status,
+          paymentStatus: saleData.paymentStatus,
+        },
+        verified: false,
+        claimToken: null,
+        claimExpiresAt: null,
+        error: 'Payment has not been completed successfully. Please retry from the checkout page.',
+      });
+    }
+
+    // Defense in depth: the txnid PayU echoes back must match the one
+    // we asked about. (transaction_details is keyed by txnid, but check anyway.)
+    if (txnDetails.txnid && String(txnDetails.txnid) !== storedTxnid) {
+      console.error(`[verifyPayUPayment] PayU txnid mismatch: asked=${storedTxnid}, got=${txnDetails.txnid}`);
+      return res.json({
+        sale: { saleId: saleData.saleId },
+        verified: false,
+        claimToken: null,
+        claimExpiresAt: null,
+        error: 'Payment verification failed. Please contact support.',
+      });
+    }
+
+    // Amount check (paisa, same pattern as webhook.js:118).
+    // PayU returns amount as a string; saleData.amount is a number.
+    const expectedAmount = Number(saleData.amount);
+    const paidAmount = Number(txnDetails.amount);
+    if (!Number.isFinite(expectedAmount) || !Number.isFinite(paidAmount) ||
+        Math.abs(Math.round(expectedAmount * 100) - Math.round(paidAmount * 100)) !== 0) {
+      console.error(`[verifyPayUPayment] Amount mismatch for sale ${saleData.saleId}: expected=${expectedAmount}, paid=${paidAmount}`);
+      return res.json({
+        sale: { saleId: saleData.saleId },
+        verified: false,
+        claimToken: null,
+        claimExpiresAt: null,
+        error: 'Payment verification failed. Please contact support.',
+      });
+    }
+
+    // Step 5: All PayU checks passed. This request has proven that the
+    // exact stored transaction was a successful payment for the exact
+    // stored amount. We may now issue a delivery claim.
+    //
+    // Side effect: if the sale has not been marked verified by the
+    // webhook yet (e.g. webhook is slow), promote it now. This is the
+    // same flow the /pay/verify route already had for the pending case,
+    // and is idempotent.
+    if (saleData.status !== 'verified' || saleData.paymentStatus !== 'verified') {
       try {
-        const payuResult = await payu.verifyPaymentServerSide({ txnid: saleData.gatewaySessionId });
-        // PayU verify response format: { status: 1, ... }
-        if (payuResult && payuResult.status === '1') {
-          // Server confirmed payment — update the sale
-          await saleDocRef.update({
-            status: 'verified',
-            paymentStatus: 'verified',
-            paidAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-          // Generate commission (idempotent via commission_locks)
-          await generateCommissionLedger(saleData.saleId, saleData.gatewaySessionId, { ...saleData, status: 'verified' });
-          verified = true;
-          saleData = { ...saleData, status: 'verified', paymentStatus: 'verified' };
-        }
+        await db.collection('sales').doc(saleData.id).update({
+          status: 'verified',
+          paymentStatus: 'verified',
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
+          gatewayTransactionId: storedTxnid,
+        });
+        await generateCommissionLedger(saleData.saleId, storedTxnid, {
+          ...saleData, status: 'verified', paymentStatus: 'verified'
+        });
+        saleData = { ...saleData, status: 'verified', paymentStatus: 'verified' };
       } catch (e) {
-        console.warn('[verifyPayUPayment] PayU API error:', e.message);
-        // Don't fail — return the current state
+        // The webhook may have raced us. Idempotent fields + commission_locks
+        // mean this is safe to ignore. Continue to claim issuance.
+        console.warn('[verifyPayUPayment] Side-effect update warning:', e.message);
       }
     }
 
-    // Return ONLY customer-facing fields — never hierarchy IDs, commission data, or secrets
+    // Step 6: Issue a short-lived delivery claim so the customer can
+    // download via /pay/delivery-claim/:claimToken. The claim is bound
+    // server-side to this saleId.
+    let claimToken = null;
+    let claimExpiresAt = null;
+    try {
+      const claimResult = await generateDeliveryClaim(saleData.saleId);
+      if (claimResult.success) {
+        claimToken = claimResult.claimToken;
+        claimExpiresAt = claimResult.expiresAt;
+      } else {
+        console.warn('[verifyPayUPayment] Claim generation failed:', claimResult.error);
+      }
+    } catch (e) {
+      console.warn('[verifyPayUPayment] Claim generation error:', e.message);
+    }
+
     return res.json({
       sale: {
         saleId: saleData.saleId,
@@ -341,11 +475,13 @@ router.post('/verify', async (req, res, next) => {
         amount: saleData.amount,
         currency: saleData.currency,
         status: saleData.status,
-        verified,
+        verified: true,
         paymentStatus: saleData.paymentStatus,
         deliveryStatus: saleData.deliveryStatus,
         customerName: saleData.customerName,
       },
+      claimToken,
+      claimExpiresAt,
     });
 
   } catch (err) {
@@ -367,6 +503,43 @@ router.post('/delivery-token', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: result.error });
     }
     return res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============================================================
+// GET /pay/delivery-claim/:claimToken
+// Secure delivery: atomically consumes a server-issued claim token and
+// returns the product download. The claim is 32 random bytes (256-bit),
+// bound to one saleId, single-use, and expires in 30 minutes.
+// Sale ID alone is NEVER sufficient to authorize delivery.
+// ============================================================
+router.get('/delivery-claim/:claimToken', deliveryClaimLimiter, async (req, res, next) => {
+  try {
+    const { claimToken } = req.params;
+
+    // Basic format guard: must be a non-empty string of hex characters,
+    // length 64 (32 bytes). Reject obviously malformed inputs cheaply.
+    if (typeof claimToken !== 'string' || !/^[0-9a-f]{64}$/i.test(claimToken)) {
+      return res.status(403).json({ error: 'Invalid or expired download link.' });
+    }
+
+    const result = await consumeDeliveryClaim(claimToken);
+
+    if (!result.success) {
+      // Generic error — never reveal internal state
+      return res.status(403).json({ error: 'Invalid or expired download link.' });
+    }
+
+    // Delivery succeeded. Return the authorized product download.
+    return res.json({
+      success: true,
+      downloadUrl: result.downloadUrl,
+      accessPassword: result.accessPassword,
+      productName: result.productName,
+    });
+
   } catch (err) {
     next(err);
   }

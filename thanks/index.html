@@ -98,9 +98,15 @@ async function callVerifyPayment(saleId, transactionId){
   if (transactionId) payload.transactionId = transactionId;
   const res = await window.ELAS_API.verifyPayment(payload);
   if (res && res.sale) {
-    return { sale: res.sale, verified: !!res.sale.verified, error: res.error };
+    return {
+      sale: res.sale,
+      verified: !!res.sale.verified,
+      claimToken: res.claimToken || null,
+      claimExpiresAt: res.claimExpiresAt || null,
+      error: res.error,
+    };
   }
-  return { sale: null, verified: false, error: (res && res.error) || 'No payment found' };
+  return { sale: null, verified: false, claimToken: null, claimExpiresAt: null, error: (res && res.error) || 'No payment found' };
 }
 
 /* ---------- Main: verify server-side then render ---------- */
@@ -156,35 +162,48 @@ async function verifyAndRender(){
   const productName = saleData.productName || 'ELAS Business OS';
 
   if (result.verified) {
-    renderVerified(content, saleData, displaySaleId, productName, amount);
+    renderVerified(content, saleData, displaySaleId, productName, amount, result.claimToken);
   } else {
     renderPending(content, saleData, displaySaleId, productName, amount, serverError);
   }
 }
 
 /* ---------- Verified UI ---------- */
-function renderVerified(content, sale, saleId, productName, amount){
+function renderVerified(content, sale, saleId, productName, amount, claimToken){
+  // The short-lived claim token was returned together with the verified sale.
+  // The browser never sees the actual delivery token; clicking the download
+  // button hits /pay/delivery-claim/:claimToken which consumes the claim
+  // server-side and returns the product.
   const deliveryStatus = sale.deliveryStatus || 'authorized';
-  let deliveryHTML = '';
+  const hasClaim = typeof claimToken === 'string' && claimToken.length === 64;
+
+  let deliveryHTML;
   if(deliveryStatus === 'authorized'){
     deliveryHTML = `
-      <div class="thanks-delivery">
+      <div class="thanks-delivery" id="deliveryBox">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <strong style="font-size:14px;">Your Product</strong>
           <span class="delivery-status delivery-authorized">✓ Authorized</span>
         </div>
-        <p style="color:var(--text-dim);font-size:13px;margin:0 0 14px;">
-          Your purchase is confirmed. Sign in to Business OS to access your product.
-        </p>
-        <a href="/app/" class="btn btn-primary">Open Business OS →</a>
+        <div id="deliveryInner">
+          ${hasClaim
+            ? renderDownloadButton(claimToken)
+            : `<p style="color:var(--text-dim);font-size:13px;margin:0 0 12px;">
+                 Your download is being prepared…
+               </p>
+               <div class="spinner" style="border-top-color:var(--accent);width:18px;height:18px;"></div>`
+          }
+        </div>
       </div>
     `;
   } else {
     deliveryHTML = `
-      <div class="thanks-delivery">
+      <div class="thanks-delivery" id="deliveryBox">
         <strong style="font-size:14px;">Delivery</strong>
-        <p style="color:var(--text-dim);font-size:13px;margin:8px 0 12px;">Product access is being prepared…</p>
-        <a href="/app/" class="btn btn-ghost">Open Business OS</a>
+        <div id="deliveryInner">
+          <p style="color:var(--text-dim);font-size:13px;margin:8px 0 12px;">Product access is being prepared…</p>
+          <div class="spinner" style="border-top-color:var(--accent);width:18px;height:18px;"></div>
+        </div>
       </div>
     `;
   }
@@ -201,6 +220,20 @@ function renderVerified(content, sale, saleId, productName, amount){
     <div class="thanks-divider"></div>
     <a href="/index/" class="btn btn-ghost">Back to Home</a>
     <p style="font-size:11px;color:var(--text-faint);text-align:center;margin:14px 0 0;">Need help? <a href="mailto:getelasos@gmail.com" style="color:var(--text-dim)">getelasos@gmail.com</a></p>
+  `;
+}
+
+function renderDownloadButton(claimToken){
+  return `
+    <p style="color:var(--text-dim);font-size:13px;margin:0 0 14px;">
+      Your download link is ready. Click below to download your product.
+    </p>
+    <a href="/pay/delivery-claim/${encodeURIComponent(claimToken)}" class="btn btn-primary" target="_blank" rel="noopener">
+      📥 Download Product
+    </a>
+    <p style="color:var(--text-faint);font-size:11px;margin:10px 0 0;">
+      This link is single-use and expires in 30 minutes.
+    </p>
   `;
 }
 

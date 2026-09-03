@@ -35,7 +35,7 @@ async function generateCommissionLedger(saleId, transactionId, sale) {
       return { success: false, error: 'Closer not found' };
     }
     const closer = closerDoc.data();
-    const productManagerId = closer.managerId;
+    const productManagerId = closer.assignedManagerId || closer.managerId;
     if (!productManagerId) {
       return { success: false, error: 'Closer missing managerId (Product Manager)' };
     }
@@ -136,7 +136,7 @@ async function sendCommissionNotifications(saleId, closerId, pmId, smId, rates) 
     });
   }
 
-  const smUserQuery = await db.collection('users').where('entityId', '==', smId).where('role', '==', 'seniorManager').limit(1).get();
+  const smUserQuery = await db.collection('users').where('entityId', '==', smId).where('role', '==', 'senior_manager').limit(1).get();
   if (!smUserQuery.empty) {
     const smUser = smUserQuery.docs[0].id;
     const notifRef = db.collection('notifications').doc();

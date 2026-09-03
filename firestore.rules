@@ -210,7 +210,7 @@ service cloud.firestore {
         // Senior Manager can update leads
         isSeniorManager() ||
         // Closer can update their own leads
-        (isCloser() && resource.data.assignedCloserId == elasUser().entityId)
+        (isCloser() && resource.data.assignedCloserId == claimEntityId())
       );
       allow delete: if isAdmin();
     }
@@ -223,10 +223,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isServiceAccount() || isAdmin() || isProductManager() || isSeniorManager() ||
-        (isCloser() && resource.data.closerId == elasUser().entityId) ||
-        (isAuthenticated() && resource.data.clientId == elasUser().entityId) ||
-        (isAuthenticated() && resource.data.dpId == elasUser().entityId) ||
-        (isAuthenticated() && resource.data.freelancerId == elasUser().entityId);
+        (isCloser() && resource.data.closerId == claimEntityId()) ||
+        (isAuthenticated() && resource.data.clientId == claimEntityId()) ||
+        (isAuthenticated() && resource.data.dpId == claimEntityId()) ||
+        (isAuthenticated() && resource.data.freelancerId == claimEntityId());
       allow delete: if isAdmin();
     }
 
@@ -317,7 +317,22 @@ service cloud.firestore {
        Service-account creation; read allowed for auth users (to verify status).
        ============================================================ */
     match /delivery_tokens/{docId} {
-      allow read: if isAuthenticated();
+      // Only the service account (Admin SDK) ever reads delivery tokens.
+      // The browser accesses tokens exclusively via:
+      //   GET /pay/delivery-claim/:claimToken — server-controlled, claim-consumed
+      //   GET /pay/delivery/:token            — consumes token atomically
+      allow read: if isServiceAccount();
+      allow write: if isServiceAccount();
+    }
+
+    /* ============================================================
+       DELIVERY CLAIMS (short-lived, single-use delivery authorization)
+       Server-only: issued by /pay/verify on verified sales, consumed by
+       /pay/delivery-claim/:claimToken. The browser never reads or writes
+       this collection directly.
+       ============================================================ */
+    match /delivery_claims/{docId} {
+      allow read: if isServiceAccount();
       allow write: if isServiceAccount();
     }
 
