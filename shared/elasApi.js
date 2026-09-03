@@ -43,8 +43,8 @@
     if (method === 'GET' || method === 'DELETE') {
       body = undefined;
     } else {
-      // Firebase callable format: { data: ... }
-      body = JSON.stringify({ data: data || {} });
+      // Direct JSON body for Express backend
+      body = JSON.stringify(data || {});
     }
 
     const resp = await fetch(API_BASE + path, {
