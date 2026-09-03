@@ -1528,7 +1528,7 @@ async function handleLogin(){
     document.getElementById('loginUsername').value='';
 
     // 5) If this is a first-login after migration, force password change
-    if (result.data.mustResetPassword) {
+    if (result.mustResetPassword) {
       toast('Please change your temporary password in Settings', 'info');
     }
 
