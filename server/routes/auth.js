@@ -161,7 +161,7 @@ router.post('/login', async (req, res, next) => {
 
         console.log(`[auth/login] Migrated user ${normalizedLoginId} to Firebase Auth`);
       } catch (err) {
-        if (err.code === 'auth/uid-already-exists') {
+        if (err.code === 'auth/uid-already-exists' || err.code === 'auth/email-already-exists') {
           const existing = await admin.auth().getUserByEmail(firebaseEmail);
           firebaseUid = existing.uid;
           await admin.auth().setCustomUserClaims(firebaseUid, buildCustomClaims(user));
@@ -172,7 +172,7 @@ router.post('/login', async (req, res, next) => {
             migratedToFirebaseAuth: true,
           });
         } else {
-          console.error('[auth/login] Migration failed for', normalizedLoginId, err.message);
+          console.error('[auth/login] Migration failed for', normalizedLoginId, err.code, err.message);
           return res.status(500).json({ error: 'Account migration failed. Please contact support.' });
         }
       }
