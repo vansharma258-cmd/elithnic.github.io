@@ -30,7 +30,7 @@ const deliveryClaimLimiter = rateLimit({
 router.get('/products', async (req, res, next) => {
   try {
     const db = admin.firestore();
-    const snap = await db.collection('products').where('status', '==', 'active').get();
+    const snap = await db.collection('products').where('status', '==', 'Active').get();
     const products = snap.docs.map(d => {
       const p = d.data();
       return {
