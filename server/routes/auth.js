@@ -373,6 +373,112 @@ function requireAuth(req, res, next) {
     });
 }
 
+// ============================================================
+// TEMPORARY — POST /auth/recover-admin
+//
+// PURPOSE: One-time, tightly restricted recovery endpoint for the
+// ELAS ADMIN Firebase Auth account (UID 'admin_user') that was
+// migrated to Firebase Auth without the temporary password being
+// returned/stored. This endpoint sets a new Firebase Auth password
+// for that single, hard-coded UID, preserving UID, email, custom
+// claims, and the Firestore user document.
+//
+// SECURITY:
+//   - Hard-coded to UID 'admin_user' only — refuses any other UID.
+//   - Requires the ELAS_BOOTSTRAP_SECRET env var via the
+//     'x-elas-recovery-secret' request header (constant-time compare).
+//   - Strict rate limit: 5 requests per IP per hour.
+//   - POST-only.
+//   - Never logs the secret or the new password.
+//   - Returns a generic success message — never returns the password.
+//   - Validates password length and basic shape before calling Admin SDK.
+//
+// MUST BE REMOVED IMMEDIATELY AFTER ADMIN RECOVERY IS COMPLETE.
+// Leave a TODO in place until removal.
+// ============================================================
+// TODO(RECOVERY): REMOVE /auth/recover-admin AFTER ADMIN PASSWORD IS RESET.
+const RECOVERY_TARGET_UID = 'admin_user';
+const recoverAdminLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 attempts per IP per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many recovery attempts. Please try again later.' },
+});
+router.post('/recover-admin', recoverAdminLimiter, async (req, res) => {
+  // Never log the secret, the body, or the password.
+  const headerSecret = req.headers['x-elas-recovery-secret'];
+  const expectedSecret = process.env.ELAS_BOOTSTRAP_SECRET;
+
+  if (!expectedSecret) {
+    console.error('[auth/recover-admin] ELAS_BOOTSTRAP_SECRET is not configured');
+    return res.status(500).json({ error: 'Recovery is not configured' });
+  }
+  if (!headerSecret || typeof headerSecret !== 'string' || headerSecret.length !== expectedSecret.length) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  // Constant-time comparison
+  const headerBuf = Buffer.from(headerSecret, 'utf8');
+  const expectedBuf = Buffer.from(expectedSecret, 'utf8');
+  if (!crypto.timingSafeEqual(headerBuf, expectedBuf)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { password } = req.body || {};
+  if (typeof password !== 'string') {
+    return res.status(400).json({ error: 'password is required' });
+  }
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ error: 'Password must be between 8 and 128 characters' });
+  }
+  // Reject passwords that contain obviously dangerous characters for logs.
+  // (Strictly a defensive guard; the password is never logged regardless.)
+  if (!/^[\x21-\x7E]+$/.test(password)) {
+    return res.status(400).json({ error: 'Password contains invalid characters' });
+  }
+
+  try {
+    // Update the existing Firebase Auth user only — no create, no delete,
+    // no email change, no claims change, no UID change.
+    const admin = require('firebase-admin');
+    await admin.auth().updateUser(RECOVERY_TARGET_UID, { password });
+
+    // If the Firestore user document has a mustResetPassword field, set it
+    // to true. Otherwise do not invent schema — leave the doc untouched.
+    try {
+      const db = getAdminDb();
+      const userRef = db.collection('users').doc(RECOVERY_TARGET_UID);
+      const userSnap = await userRef.get();
+      if (userSnap.exists) {
+        const data = userSnap.data() || {};
+        if ('mustResetPassword' in data) {
+          await userRef.update({
+            mustResetPassword: true,
+            lastRecoveryResetAt: require('firebase-admin').firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        // If mustResetPassword does not exist, do not write — preserve existing schema.
+      }
+    } catch (fsErr) {
+      // Firestore write failure is non-fatal — the Auth update already succeeded.
+      console.warn('[auth/recover-admin] Firestore flag update skipped:', fsErr.message);
+    }
+
+    return res.json({ success: true, message: 'Admin password reset successfully.' });
+  } catch (err) {
+    // Log only the error code and a generic message — never the password or the secret.
+    console.error('[auth/recover-admin] updateUser failed:', err.code || 'unknown');
+    if (err.code === 'auth/user-not-found') {
+      return res.status(404).json({ error: 'Target user not found' });
+    }
+    if (err.code === 'auth/invalid-password') {
+      return res.status(400).json({ error: 'Password does not meet requirements' });
+    }
+    return res.status(500).json({ error: 'Failed to reset admin password' });
+  }
+});
+// TODO(RECOVERY): END — REMOVE /auth/recover-admin AFTER ADMIN PASSWORD IS RESET.
+
 module.exports = router;
 module.exports.requireAuth = requireAuth;
 
