@@ -1292,11 +1292,11 @@ function productsVisibleToCurrentUser(){
     });
   }
   if(CURRENT_USER.role === 'senior_manager'){
-    const pmIds = new Set(productManagers(CURRENT_USER.id).map(u => u.id));
+    // SM sees products where they appear in assignedSeniorManagerIds
+    // (Admin assigns products to SMs via that field server-side)
     return all.filter(p => {
-      const ids = p.assignedManagerIds || [];
-      if(!ids.length) return true;
-      return ids.some(id => pmIds.has(id));
+      const smIds = p.assignedSeniorManagerIds || [];
+      return smIds.includes(CURRENT_USER.id);
     });
   }
   return all;
@@ -1451,6 +1451,63 @@ function entityNameForUser(u){
   }
   const e = entityForUser(u);
   return e ? e.name : '(unlinked)';
+}
+
+/* ---------------------------------------------------------------------
+   4b. HIERARCHY HELPERS — derived from Firestore users/ collection
+   --------------------------------------------------------------------- */
+/** All users with role=productmanager in the users/ collection */
+function productManagers(smId){
+  const all = getAll('users').filter(u => u.role === 'productmanager');
+  if (smId) return all.filter(u => u.seniorManagerId === smId);
+  return all;
+}
+/** All users with role=senior_manager in the users/ collection */
+function seniorManagers(){
+  return getAll('users').filter(u => u.role === 'senior_manager');
+}
+/** Closers under a PM's team — from closers/ collection, filtered by managerId (PM's users/ doc ID) */
+function closersForManager(managerIdFilter){
+  return getAll('closers').filter(c => {
+    const m = c.managerId || c.assignedManagerId;
+    return m === managerIdFilter;
+  });
+}
+/** All closers whose PM belongs to a given SM — traverses PM→SM chain */
+function closersUnderSenior(smId){
+  const pms = productManagers(smId);
+  const pmIds = new Set(pms.map(p => p.id));
+  return getAll('closers').filter(c => {
+    const m = c.managerId || c.assignedManagerId;
+    return pmIds.has(m);
+  });
+}
+/** Which closers the current user can see (based on their role and position in hierarchy) */
+function visibleClosersForCurrentUser(){
+  if (!CURRENT_USER) return [];
+  if (CURRENT_USER.role === 'admin') return getAll('closers');
+  if (CURRENT_USER.role === 'productmanager') return closersForManager(CURRENT_USER.id);
+  if (CURRENT_USER.role === 'senior_manager') return closersUnderSenior(CURRENT_USER.id);
+  return [];
+}
+/** DsaCloser entity by its doc ID */
+function dsaCloserById(entityId){
+  return getById('dsaClosers', entityId);
+}
+/** Docs assigned to the current dsaCloser */
+function docsForCurrentCloser(){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'dsacloser') return [];
+  return getAll('documents').filter(d => d.closerId === CURRENT_USER.entityId);
+}
+/** Whether the current dsaCloser has signed a given document */
+function isDocSignedByCurrentCloser(doc){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'dsacloser') return false;
+  return (doc.signedBy || []).includes(CURRENT_USER.entityId);
+}
+/** Wallet balance for a dsaCloser */
+function walletBalance(closerEntityId){
+  return getAll('productDeals').filter(d => d.dsaCloserId === closerEntityId)
+    .reduce((s, d) => s + (Number(d.closerCommission) || 0), 0);
 }
 
 async function ensureHierarchyAccounts(){
@@ -2969,21 +3026,17 @@ async function submitOnboardCloser(){
   const password = generateSecurePassword(10);
   if (!FIREBASE_AVAILABLE || !window.ELAS_API) { toast('Authentication service unavailable', 'error'); return; }
   try{
-    // 1) Create the closers/ entity record first (Firestore rules allow PM/SM to create these)
-    const rec = {
-      id: uid('closer'), name, whatsapp, email, commissionRate,
-      createdDate: todayISO()
-    };
-    if(CURRENT_USER.role === 'productmanager'){
-      rec.managerId = CURRENT_USER.id;
-    }
-    await upsert('closers', rec);
-    // 2) Create Firebase Auth account + user doc via Render API
+    // Server creates both the closers/ entity AND the users/ doc + Firebase Auth
+    // atomically. Browser must NOT pre-create closers/ — that would create
+    // duplicates. The server derives managerId/seniorManagerId from the caller's
+    // authenticated identity, so no relationship fields are sent from the browser.
     const result = await window.ELAS_API.createUser({
       loginId, password, name,
       role: 'closer',
-      entityId: rec.id,
-      managerId: CURRENT_USER.role === 'productmanager' ? CURRENT_USER.id : null,
+      whatsapp,
+      email,
+      commissionRate,
+      createdDate: todayISO(),
     });
     if (result && result.success) {
       logActivity('Closer', (CURRENT_USER.name||'User')+' onboarded Closer: '+name+' ('+loginId+')');
@@ -2993,6 +3046,11 @@ async function submitOnboardCloser(){
         loginId, password,
         note: 'Share these credentials with the Closer securely. They will not be shown again in the app.'
       });
+      // Trigger a sync of the local caches so the new Closer appears in lists
+      if (typeof loadAllFirestoreData === 'function') {
+        try { await loadAllFirestoreData(); } catch (e) { /* non-fatal */ }
+      }
+      if (typeof renderAll === 'function') renderAll();
     }
   }catch(err){
     console.error(err);
@@ -5071,7 +5129,9 @@ function openProductModal(productId){
     : getAll('closers');
   const assignedCloserIds = p ? (p.assignedCloserIds||[]) : [];
   const assignedManagerIds = p ? (p.assignedManagerIds||[]) : [];
+  const assignedSeniorManagerIds = p ? (p.assignedSeniorManagerIds||[]) : [];
   const allPMs = productManagers();
+  const allSMs = seniorManagers();
   const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
   renderModal(`
     <div class="modal-head"><div class="modal-title">${p?'Edit Product':'Add New Product'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -5092,6 +5152,14 @@ function openProductModal(productId){
       <div class="field"><label>Tech Stack / Tags</label><input type="text" id="prd_tags" value="${escapeHtml(p?.tags||'')}" placeholder="React, Node.js, Firebase…"></div>
     </div>
     ${isAdmin ? `
+    <div class="detail-section-title">Assign Senior Managers</div>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Tick the Senior Managers who can manage this product. SMs can view and assign it to their PMs.</p>
+    <div id="smCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:120px;overflow-y:auto;margin-bottom:12px;">
+      ${allSMs.length ? allSMs.map(sm=>`
+        <div class="check-field"><input type="checkbox" id="sm_${sm.id}" ${assignedSeniorManagerIds.includes(sm.id)?'checked':''}>
+        <label for="sm_${sm.id}">${escapeHtml(sm.name)}</label></div>
+      `).join('') : '<p style="font-size:12px;color:var(--text-faint);">No senior managers yet.</p>'}
+    </div>
     <div class="detail-section-title">Assign Product Managers</div>
     <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Tick the Product Managers responsible for this product. They can then assign it to their Closers.</p>
     <div id="managerCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:120px;overflow-y:auto;margin-bottom:12px;">
@@ -5138,11 +5206,13 @@ async function submitProductForm(productId){
     assignedCloserIds = closers.filter(c => document.getElementById('pc_'+c.id)?.checked).map(c=>c.id);
   }
   let assignedManagerIds = (existing && existing.assignedManagerIds) ? existing.assignedManagerIds.slice() : [];
+  let assignedSeniorManagerIds = (existing && existing.assignedSeniorManagerIds) ? existing.assignedSeniorManagerIds.slice() : [];
   if(CURRENT_USER && CURRENT_USER.role === 'admin'){
     assignedManagerIds = productManagers().filter(m => document.getElementById('pm_'+m.id)?.checked).map(m=>m.id);
-  } else if(CURRENT_USER && CURRENT_USER.role === 'productmanager' && isNew){
-    assignedManagerIds = [CURRENT_USER.id];
+    assignedSeniorManagerIds = seniorManagers().filter(sm => document.getElementById('sm_'+sm.id)?.checked).map(sm=>sm.id);
   }
+  // NOTE: PMs cannot self-assign products. assignedManagerIds for newly created
+  // products is determined by Admin. PMs can only add closer assignments.
   const record = Object.assign(existing||{}, {
     id: isNew ? uid('prod') : productId,
     name,
@@ -5157,6 +5227,7 @@ async function submitProductForm(productId){
     tags: document.getElementById('prd_tags').value.trim(),
     assignedCloserIds,
     assignedManagerIds,
+    assignedSeniorManagerIds,
     createdDate: existing?.createdDate || todayISO()
   });
   const btn = document.querySelector('.modal-foot .btn-primary');

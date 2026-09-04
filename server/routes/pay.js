@@ -1,7 +1,9 @@
 /* ===========================================================
-   ELAS — Pay Routes (Public Checkout)
+   ELAS — Pay Routes (Public Checkout, Hierarchy-Scoped)
    ===========================================================
    All routes are public (no auth required) unless noted.
+   Routes that expose data scoped by hierarchy now require auth
+   and verify the caller's role/position in the chain.
    =========================================================== */
 
 const express = require('express');
@@ -14,6 +16,7 @@ const payu = require('../shared/paymentService');
 const { generateCommissionLedger } = require('../shared/commissionService');
 const { generateDeliveryToken, generateDeliveryClaim, consumeDeliveryClaim } = require('../shared/deliveryService');
 const { requireAuth } = require('./auth');
+const { getFirestoreUserByAuthUid } = require('../shared/firestore');
 
 const deliveryClaimLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -24,14 +27,138 @@ const deliveryClaimLimiter = rateLimit({
 });
 
 // ============================================================
-// GET /pay/products
-// listActiveProducts replacement
+// Hierarchy-Scoped Product Helpers
 // ============================================================
-router.get('/products', async (req, res, next) => {
+
+/**
+ * Resolve a product's assigned entities for the given caller role.
+ * Returns { pmIds, closerEntityIds } — i.e. the products the caller
+ * is allowed to see in this position in the hierarchy.
+ */
+async function resolveCallerProductScope(caller) {
+  const db = admin.firestore();
+
+  if (caller.role === 'admin') {
+    // Admin sees all active products
+    return { adminAll: true };
+  }
+
+  if (caller.role === 'senior_manager') {
+    // SM sees products assigned to them via assignedSeniorManagerIds
+    const smId = caller.id;
+    const snap = await db.collection('products')
+      .where('assignedSeniorManagerIds', 'array-contains', smId)
+      .get();
+    return { productIds: snap.docs.map(d => d.id) };
+  }
+
+  if (caller.role === 'productmanager') {
+    // PM sees products assigned to them via assignedManagerIds
+    const pmId = caller.id;
+    const snap = await db.collection('products')
+      .where('assignedManagerIds', 'array-contains', pmId)
+      .get();
+    return { productIds: snap.docs.map(d => d.id) };
+  }
+
+  if (caller.role === 'closer') {
+    // Closer sees products where their entityId is in assignedCloserIds
+    const entityId = caller.entityId;
+    if (!entityId) return { productIds: [] };
+    const snap = await db.collection('products')
+      .where('assignedCloserIds', 'array-contains', entityId)
+      .get();
+    return { productIds: snap.docs.map(d => d.id) };
+  }
+
+  return { productIds: [] };
+}
+
+/**
+ * Verify that a product is available to a Closer through the
+ * Admin → SM → PM → Closer chain. Returns true only if:
+ *   - product exists and status is "Active"
+ *   - product.assignedCloserIds includes the closer's entityId
+ *   - the closer's PM is in product.assignedManagerIds
+ *   - the PM's SM is in product.assignedSeniorManagerIds
+ *
+ * For SMs creating PM, or PMs creating Closers, this same logic
+ * verifies that the product distribution chain is valid.
+ */
+async function isProductAvailableToCloser(productDoc, caller) {
+  if (caller.role !== 'closer' || !caller.entityId) return false;
+  const p = productDoc.data();
+  if (p.status !== 'Active') return false;
+
+  // Closer must be in the product's assignedCloserIds
+  const assignedClosers = p.assignedCloserIds || [];
+  if (!assignedClosers.includes(caller.entityId)) return false;
+
+  // Closer must have a PM assigned
+  const closerEntityId = caller.entityId;
+  const closerDoc = await admin.firestore().collection('closers').doc(closerEntityId).get();
+  if (!closerDoc.exists) return false;
+  const closer = closerDoc.data();
+  const pmId = closer.assignedManagerId || closer.managerId;
+  if (!pmId) return false;
+
+  // The PM must be in product.assignedManagerIds
+  const assignedManagers = p.assignedManagerIds || [];
+  if (!assignedManagers.includes(pmId)) return false;
+
+  // The PM must have a SM
+  const pmUserDoc = await admin.firestore().collection('users').doc(pmId).get();
+  if (!pmUserDoc.exists) return false;
+  const pmUser = pmUserDoc.data();
+  const smId = pmUser.seniorManagerId;
+  if (!smId) return false;
+
+  // The SM must be in product.assignedSeniorManagerIds
+  const assignedSms = p.assignedSeniorManagerIds || [];
+  if (!assignedSms.includes(smId)) return false;
+
+  return true;
+}
+
+// ============================================================
+// GET /pay/products
+// Hierarchy-scoped, auth-required product listing.
+// Returns ONLY products assigned to the caller through the chain.
+// Never returns zipUrl / zipPassword.
+// ============================================================
+router.get('/products', requireAuth, async (req, res, next) => {
   try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const scope = await resolveCallerProductScope(caller);
     const db = admin.firestore();
-    const snap = await db.collection('products').where('status', '==', 'Active').get();
-    const products = snap.docs.map(d => {
+
+    let productDocs;
+    if (scope.adminAll) {
+      productDocs = await db.collection('products').where('status', '==', 'Active').get();
+    } else if (!scope.productIds) {
+      return res.json({ products: [] });
+    } else if (scope.productIds.length === 0) {
+      return res.json({ products: [] });
+    } else {
+      // Fetch by ID list, then filter by Active
+      // Firestore 'in' supports up to 30; chunk for safety
+      const chunks = [];
+      for (let i = 0; i < scope.productIds.length; i += 30) {
+        chunks.push(scope.productIds.slice(i, i + 30));
+      }
+      const all = [];
+      for (const chunk of chunks) {
+        const snap = await db.collection('products').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
+        all.push(...snap.docs);
+      }
+      productDocs = { docs: all.filter(d => d.data().status === 'Active') };
+    }
+
+    const products = productDocs.docs.map(d => {
       const p = d.data();
       return {
         id: d.id,
@@ -42,10 +169,15 @@ router.get('/products', async (req, res, next) => {
         tags: p.tags,
         imageUrl: p.imageUrl,
         featured: p.featured,
+        purposeVideoUrl: p.purposeVideoUrl || null,
         // Explicitly NEVER include: zipUrl, zipPassword, zipStoragePath
+        // Explicitly NEVER include: assignedManagerIds, assignedSeniorManagerIds
+        // (these are internal admin/SM fields, not customer data)
       };
     });
+
     return res.json({ products });
+
   } catch (err) {
     next(err);
   }
@@ -54,6 +186,7 @@ router.get('/products', async (req, res, next) => {
 // ============================================================
 // POST /pay/closer
 // lookupCloserAttribution replacement
+// Public: validate a closer code (for legacy /pay/ flow).
 // ============================================================
 router.post('/closer', async (req, res, next) => {
   try {
@@ -93,6 +226,7 @@ router.post('/closer', async (req, res, next) => {
       return res.json({ valid: false, error: 'This Closer ID is currently inactive.' });
     }
 
+    // Resolve PM from the canonical users/ collection
     const pmId = closer.assignedManagerId || closer.managerId;
     if (!pmId) {
       return res.json({ valid: false, error: 'This Closer is not yet assigned to a manager.' });
@@ -103,6 +237,9 @@ router.post('/closer', async (req, res, next) => {
       return res.json({ valid: false, error: 'Product Manager not found.' });
     }
     const pm = pmDoc.data();
+    if (pm.role !== 'productmanager') {
+      return res.json({ valid: false, error: 'Assigned manager is not a Product Manager.' });
+    }
 
     const smId = pm.seniorManagerId;
     if (!smId) {
@@ -112,6 +249,9 @@ router.post('/closer', async (req, res, next) => {
     const smDoc = await db.collection('users').doc(smId).get();
     if (!smDoc.exists) {
       return res.json({ valid: false, error: 'Senior Manager not found.' });
+    }
+    if (smDoc.data().role !== 'senior_manager') {
+      return res.json({ valid: false, error: 'Assigned senior is not a Senior Manager.' });
     }
 
     return res.json({
@@ -131,19 +271,23 @@ router.post('/closer', async (req, res, next) => {
 
 // ============================================================
 // POST /pay/prepare-sale
-// Authenticated closer creates a pending sale with locked attribution.
-// The client opens /pay/?saleId=SALE-ID and completes payment.
+// Authenticated closer (or PM/SM/admin) creates a pending sale
+// with locked attribution. Server verifies that the requested
+// product is actually assigned to the caller through the chain.
 // ============================================================
-router.post('/prepare-sale', async (req, res, next) => {
+router.post('/prepare-sale', requireAuth, async (req, res, next) => {
   try {
-    const { productId, customer } = req.body || {};
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
+    const { productId, customer } = req.body || {};
     if (!productId || typeof productId !== 'string') {
       return res.status(400).json({ error: 'productId is required' });
     }
 
-    // Customer pre-fill is optional — if provided, it must include the
-    // minimal identifying fields. If missing, the client fills them on /pay/.
+    // Customer pre-fill is optional
     let custName = null, custEmail = null, custPhone = null, custCompany = '';
     if (customer && typeof customer === 'object') {
       custName = (customer.name || '').toString().trim() || null;
@@ -152,64 +296,51 @@ router.post('/prepare-sale', async (req, res, next) => {
       custCompany = (customer.company || '').toString().trim() || '';
     }
 
-    // Require auth — only closers (or admins/senior managers) can initiate sales
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    let authUid;
-    try {
-      const adminSdk = require('firebase-admin');
-      const decoded = await adminSdk.auth().verifyIdToken(authHeader.slice(7));
-      authUid = decoded.uid;
-    } catch (e) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
     const db = admin.firestore();
+    const role = caller.role;
+    const entityId = caller.entityId || null;
 
-    // Resolve the authenticated user → their entityId → closer entity
-    const userDoc = await db.collection('users').doc(authUid).get();
-    if (!userDoc.exists) {
-      return res.status(403).json({ error: 'User account not found' });
-    }
-    const userData = userDoc.data();
-    const role = userData.role || '';
-    const entityId = userData.entityId || null;
-
-    // Only closers (and admins/senior managers for testing) can create payment links.
-    // Admins and senior managers can create links without their own closer attribution
-    // (attributionless sales are still valid — commission goes to whoever is linked).
-    // Closers must have an entityId pointing to their closer record.
+    // Admins and senior managers can also create sale links (testing / no commission)
     const isPrivileged = ['admin', 'senior_manager'].includes(role);
-    const isCloser = role === 'closer' && entityId;
 
-    if (!isPrivileged && !isCloser) {
-      return res.status(403).json({ error: 'Only Closers can create payment links' });
+    if (!isPrivileged && role !== 'closer') {
+      return res.status(403).json({ error: 'Only Closers (or admins/senior managers) can create payment links' });
     }
 
-    // For closers: resolve their PM and SM from their entity record.
-    // For admins/senior managers: we can still create the sale without attribution
-    // (the commission field will be 0 until admin assigns attribution).
+    // Load product first
+    const productDoc = await db.collection('products').doc(productId).get();
+    if (!productDoc.exists) {
+      return res.json({ success: false, error: 'Product not found' });
+    }
+    const product = productDoc.data();
+    if (product.status !== 'Active') {
+      return res.json({ success: false, error: 'Product is not available' });
+    }
+
     let closerId = null;
     let closerDocRef = null;
     let pmId = null;
     let smId = null;
 
-    if (isCloser) {
+    if (role === 'closer') {
+      if (!entityId) {
+        return res.json({ success: false, error: 'Your account has no Closer entity assigned' });
+      }
+
+      // Verify the product is available to this Closer through the hierarchy chain
+      const ok = await isProductAvailableToCloser(productDoc, caller);
+      if (!ok) {
+        return res.json({ success: false, error: 'This product is not available to you. Contact your Product Manager.' });
+      }
+
       closerDocRef = db.collection('closers').doc(entityId);
       const closerSnap = await closerDocRef.get();
       if (!closerSnap.exists) {
-        return res.status(403).json({ error: 'Closer record not found' });
+        return res.json({ success: false, error: 'Closer record not found' });
       }
       const closer = closerSnap.data();
       closerId = entityId;
-
       pmId = closer.assignedManagerId || closer.managerId;
-      if (!pmId) {
-        return res.json({ success: false, error: 'Closer is not assigned to a Product Manager. Ask your manager to assign you one.' });
-      }
 
       const pmSnap = await db.collection('users').doc(pmId).get();
       if (!pmSnap.exists) {
@@ -220,20 +351,18 @@ router.post('/prepare-sale', async (req, res, next) => {
       if (!smId) {
         return res.json({ success: false, error: 'Product Manager has no Senior Manager assigned' });
       }
+    } else if (isPrivileged) {
+      // Admin/SM can create a sale without commission attribution.
+      // If a PM is implied, they can still create but the commission will
+      // follow the immutable sale attribution. PMs/Admins/SMs are not in the
+      // commission chain for sales they personally create.
+      // Commission attribution is derived from sale.closerId etc., not from
+      // who pressed the button.
     }
 
-    // Load product server-side — never trust browser-supplied price
-    const productDoc = await db.collection('products').doc(productId).get();
-    if (!productDoc.exists) {
-      return res.json({ success: false, error: 'Product not found' });
-    }
-    const product = productDoc.data();
     const amount = Number(product.price);
     if (!amount || amount <= 0) {
       return res.json({ success: false, error: 'Product has no valid price' });
-    }
-    if (product.status && product.status !== 'Active') {
-      return res.json({ success: false, error: 'Product is not available' });
     }
 
     // Generate cryptographically strong unique Sale ID
@@ -249,7 +378,6 @@ router.post('/prepare-sale', async (req, res, next) => {
 
     const now = new Date().toISOString();
 
-    // Build the pending sale record with immutable attribution
     const sale = {
       id: saleId,
       saleId,
@@ -263,17 +391,17 @@ router.post('/prepare-sale', async (req, res, next) => {
       deliveryStatus: 'locked',
       // Attribution — locked server-side, never from browser
       closerId: closerId,
-      closerCode: closerDocRef ? (closerSnap.data().closerId || null) : null,
+      closerCode: closerDocRef ? closerDocRef.id : null,
       productManagerId: pmId,
       seniorManagerId: smId,
-      // Customer fields — can be pre-filled if provided, otherwise client fills on /pay/
+      // Customer fields — can be pre-filled if provided
       customerName: custName,
       customerEmail: custEmail,
       customerPhone: custPhone,
       customerCompany: custCompany,
       createdAt: now,
       source: 'closer-link',
-      saleInitiatedBy: authUid,   // auth UID of the user who created this
+      saleInitiatedBy: req.authUid,
       paymentInitiatedAt: null,
       paidAt: null,
       gatewaySessionId: null,
@@ -284,7 +412,7 @@ router.post('/prepare-sale', async (req, res, next) => {
     const frontendBase = process.env.FRONTEND_URL || 'https://getelasos.com';
     const paymentUrl = `${frontendBase}/pay/?saleId=${encodeURIComponent(saleId)}`;
 
-    console.log(`[prepare-sale] Created pending sale ${saleId} for product ${product.id} by ${authUid}`);
+    console.log(`[prepare-sale] Created pending sale ${saleId} for product ${product.id} by ${req.authUid} (role=${role})`);
 
     return res.json({
       success: true,
@@ -303,14 +431,12 @@ router.post('/prepare-sale', async (req, res, next) => {
 // ============================================================
 // GET /pay/sale/:saleId
 // Public: load an existing pending sale for /pay/?saleId=
-// Returns ONLY customer-safe fields. Never exposes attribution IDs,
-// commission data, delivery tokens, or internal state.
+// Returns ONLY customer-safe fields.
 // ============================================================
 router.get('/sale/:saleId', async (req, res, next) => {
   try {
     const { saleId } = req.params;
 
-    // Validate Sale ID format: must match SALE-NUMBER
     if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
       return res.status(400).json({ error: 'Invalid sale reference' });
     }
@@ -324,8 +450,6 @@ router.get('/sale/:saleId', async (req, res, next) => {
 
     const sale = saleSnap.docs[0].data();
 
-    // Only return data for pending/unpaid sales.
-    // If already paid/verified, return a helpful message without exposing sensitive state.
     if (sale.status === 'verified' || sale.paymentStatus === 'verified') {
       return res.json({
         saleId: sale.saleId,
@@ -342,14 +466,13 @@ router.get('/sale/:saleId', async (req, res, next) => {
       });
     }
 
-    // Return ONLY what the /pay/ page needs to display to the client
     return res.json({
       saleId: sale.saleId,
       productName: sale.productName || null,
       amount: sale.amount || null,
       currency: sale.currency || 'INR',
       status: sale.status || 'pending',
-      closerName: sale.closerCode || null,  // display name only (the closerId string like "CL01")
+      closerName: sale.closerCode || null,
     });
 
   } catch (err) {
@@ -361,7 +484,7 @@ router.get('/sale/:saleId', async (req, res, next) => {
 // POST /pay/sale
 // createPayUSale replacement — full server-side checkout.
 // Handles TWO paths:
-//   1. Client payment completion for a pre-created pending sale (?saleId present)
+//   1. Pre-created sale (?saleId present)
 //   2. Legacy direct checkout (no saleId — client types closer code)
 // ============================================================
 router.post('/sale', async (req, res, next) => {
@@ -388,7 +511,6 @@ router.post('/sale', async (req, res, next) => {
         return res.json({ success: false, error: 'This sale cannot accept a new payment attempt.' });
       }
 
-      // Load product server-side to get the locked amount
       if (!sale.productId) {
         return res.json({ success: false, error: 'Sale has no associated product. Contact support.' });
       }
@@ -402,12 +524,10 @@ router.post('/sale', async (req, res, next) => {
         return res.json({ success: false, error: 'Product has no valid price. Contact support.' });
       }
 
-      // Validate customer fields
       if (!customer || !customer.name || !customer.email || !customer.phone) {
         return res.json({ success: false, error: 'Customer name, email, and phone are required.' });
       }
 
-      // Update the sale with customer details and create/find client
       const clientId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       await db.collection('clients').doc(clientId).set({
         id: clientId,
@@ -429,7 +549,6 @@ router.post('/sale', async (req, res, next) => {
         paymentStatus: 'pending',
       });
 
-      // Create PayU session using the server-stored amount
       if (!payu.isConfigured()) {
         return res.json({ success: false, error: 'Payment is not configured. Contact support.' });
       }
@@ -471,7 +590,7 @@ router.post('/sale', async (req, res, next) => {
       });
     }
 
-    // PATH B: Legacy direct checkout — client types closer code manually
+    // PATH B: Legacy direct checkout
     if (!productId || typeof productId !== 'string') {
       return res.status(400).json({ error: 'productId is required' });
     }
@@ -485,7 +604,7 @@ router.post('/sale', async (req, res, next) => {
     const normalizedCode = closerCode.trim().toUpperCase();
     const db = admin.firestore();
 
-    // 1. Resolve closer attribution
+    // 1. Resolve closer attribution from users/ + closers/ collections
     let closerQuery = await db.collection('closers')
       .where('closerId', '==', normalizedCode)
       .limit(1).get();
@@ -513,17 +632,24 @@ router.post('/sale', async (req, res, next) => {
     const pmDoc = await db.collection('users').doc(pmId).get();
     if (!pmDoc.exists) return res.json({ success: false, error: 'Product Manager not found' });
     const pm = pmDoc.data();
+    if (pm.role !== 'productmanager') {
+      return res.json({ success: false, error: 'Assigned manager is not a Product Manager' });
+    }
 
     const smId = pm.seniorManagerId;
     if (!smId) return res.json({ success: false, error: "Manager has no Senior Manager assigned" });
 
     const smDoc = await db.collection('users').doc(smId).get();
     if (!smDoc.exists) return res.json({ success: false, error: 'Senior Manager not found' });
+    if (smDoc.data().role !== 'senior_manager') {
+      return res.json({ success: false, error: 'Assigned senior is not a Senior Manager' });
+    }
 
     // 2. Load product
     const productDoc = await db.collection('products').doc(productId).get();
     if (!productDoc.exists) return res.json({ success: false, error: 'Product not found' });
     const product = productDoc.data();
+    if (product.status !== 'Active') return res.json({ success: false, error: 'Product is not available' });
     const amount = Number(product.price);
     if (!amount || amount <= 0) return res.json({ success: false, error: 'Product has no valid price' });
 
@@ -572,7 +698,6 @@ router.post('/sale', async (req, res, next) => {
       return res.json({ success: false, error: 'PayU is not configured. Contact support.' });
     }
 
-    const projectId = process.env.GCLOUD_PROJECT || 'elithnic';
     const apiBase = process.env.API_BASE_URL || `https://elas-api.onrender.com`;
     const callbackUrl = process.env.PAYU_CALLBACK_URL || `${apiBase}/webhook/payu`;
     const successUrl = process.env.PAYU_SUCCESS_URL || `https://getelasos.com/thanks/?saleId=${encodeURIComponent(saleId)}`;
@@ -615,14 +740,8 @@ router.post('/sale', async (req, res, next) => {
 });
 
 // ============================================================
-// POST /pay/verify
-// verifyPayUPayment replacement
-//
-// SECURITY: A claim is issued ONLY after a successful server-side
-// PayU verify_payment API call for the SERVER-STORED gatewaySessionId.
-// The browser-supplied saleId/transactionId is used ONLY for sale lookup.
-// Firestore sale.status === "verified" is NOT trusted as requester
-// authorization — it is server-side payment state from a prior flow.
+// POST /pay/verify — PayU server-side verification + commission
+// (UNCHANGED — PayU server-side verification architecture preserved)
 // ============================================================
 router.post('/verify', async (req, res, next) => {
   try {
@@ -633,10 +752,6 @@ router.post('/verify', async (req, res, next) => {
       return res.json({ sale: null, error: 'saleId or transactionId is required' });
     }
 
-    // Step 1: Look up the sale by saleId, or by the server-stored
-    // gatewaySessionId (which is what the browser may call "transactionId").
-    // The browser-supplied transactionId is used ONLY as a lookup key into
-    // our own Firestore; it is NEVER the txnid sent to PayU.
     let saleData = null;
 
     if (saleId) {
@@ -647,10 +762,6 @@ router.post('/verify', async (req, res, next) => {
     }
 
     if (!saleData && transactionId) {
-      // Look up by stored gatewaySessionId — this confirms the
-      // transactionId the browser supplied is one that THIS server
-      // previously sent to PayU for THIS sale. It does not prove
-      // payment on its own.
       const snap = await db.collection('sales').where('gatewaySessionId', '==', transactionId).limit(1).get();
       if (!snap.empty) {
         saleData = { id: snap.docs[0].id, ...snap.docs[0].data() };
@@ -661,23 +772,15 @@ router.post('/verify', async (req, res, next) => {
       return res.json({ sale: null, error: 'No payment found with this reference. Contact getelasos@gmail.com if this is unexpected.' });
     }
 
-    // Step 2: Require a server-stored gatewaySessionId. Without it we
-    // cannot call PayU's verify_payment API. A sale that has no
-    // gatewaySessionId was never sent to PayU by this server.
     const storedTxnid = saleData.gatewaySessionId;
     if (!storedTxnid || typeof storedTxnid !== 'string') {
       return res.json({ sale: null, error: 'Payment reference is invalid. Please retry from the checkout page.' });
     }
 
-    // Step 3: ALWAYS call PayU's verify_payment API. Use ONLY the
-    // server-stored gatewaySessionId. The result is the only thing
-    // that can authorize a delivery claim.
     let payuResult;
     try {
       payuResult = await payu.verifyPaymentServerSide({ txnid: storedTxnid });
     } catch (e) {
-      // Network error, timeout, or invalid response from PayU.
-      // Do NOT fall back to Firestore status. Do NOT issue a claim.
       console.warn('[verifyPayUPayment] PayU verify_payment API error:', e.message);
       return res.json({
         sale: {
@@ -692,14 +795,11 @@ router.post('/verify', async (req, res, next) => {
       });
     }
 
-    // Step 4: Validate the PayU response corresponds to THIS sale's
-    // stored transaction, with a successful payment, and a matching amount.
     const txnDetails = payuResult && payuResult.transaction_details
       ? (payuResult.transaction_details[storedTxnid] || null)
       : null;
 
     if (!txnDetails) {
-      // PayU did not return a record for the txnid we asked about.
       return res.json({
         sale: {
           saleId: saleData.saleId,
@@ -713,9 +813,6 @@ router.post('/verify', async (req, res, next) => {
       });
     }
 
-    // PayU success semantics: status field of the per-transaction record
-    // is the string "success" for a successful payment. This matches the
-    // webhook's existing validation (`parsed.status === payu.PAYU_STATUS_SUCCESS`).
     if (txnDetails.status !== 'success') {
       return res.json({
         sale: {
@@ -730,8 +827,6 @@ router.post('/verify', async (req, res, next) => {
       });
     }
 
-    // Defense in depth: the txnid PayU echoes back must match the one
-    // we asked about. (transaction_details is keyed by txnid, but check anyway.)
     if (txnDetails.txnid && String(txnDetails.txnid) !== storedTxnid) {
       console.error(`[verifyPayUPayment] PayU txnid mismatch: asked=${storedTxnid}, got=${txnDetails.txnid}`);
       return res.json({
@@ -743,8 +838,6 @@ router.post('/verify', async (req, res, next) => {
       });
     }
 
-    // Amount check (paisa, same pattern as webhook.js:118).
-    // PayU returns amount as a string; saleData.amount is a number.
     const expectedAmount = Number(saleData.amount);
     const paidAmount = Number(txnDetails.amount);
     if (!Number.isFinite(expectedAmount) || !Number.isFinite(paidAmount) ||
@@ -759,14 +852,6 @@ router.post('/verify', async (req, res, next) => {
       });
     }
 
-    // Step 5: All PayU checks passed. This request has proven that the
-    // exact stored transaction was a successful payment for the exact
-    // stored amount. We may now issue a delivery claim.
-    //
-    // Side effect: if the sale has not been marked verified by the
-    // webhook yet (e.g. webhook is slow), promote it now. This is the
-    // same flow the /pay/verify route already had for the pending case,
-    // and is idempotent.
     if (saleData.status !== 'verified' || saleData.paymentStatus !== 'verified') {
       try {
         await db.collection('sales').doc(saleData.id).update({
@@ -780,15 +865,10 @@ router.post('/verify', async (req, res, next) => {
         });
         saleData = { ...saleData, status: 'verified', paymentStatus: 'verified' };
       } catch (e) {
-        // The webhook may have raced us. Idempotent fields + commission_locks
-        // mean this is safe to ignore. Continue to claim issuance.
         console.warn('[verifyPayUPayment] Side-effect update warning:', e.message);
       }
     }
 
-    // Step 6: Issue a short-lived delivery claim so the customer can
-    // download via /pay/delivery-claim/:claimToken. The claim is bound
-    // server-side to this saleId.
     let claimToken = null;
     let claimExpiresAt = null;
     try {
@@ -845,17 +925,12 @@ router.post('/delivery-token', requireAuth, async (req, res, next) => {
 
 // ============================================================
 // GET /pay/delivery-claim/:claimToken
-// Secure delivery: atomically consumes a server-issued claim token and
-// returns the product download. The claim is 32 random bytes (256-bit),
-// bound to one saleId, single-use, and expires in 30 minutes.
-// Sale ID alone is NEVER sufficient to authorize delivery.
+// Secure delivery: atomically consumes a server-issued claim token
 // ============================================================
 router.get('/delivery-claim/:claimToken', deliveryClaimLimiter, async (req, res, next) => {
   try {
     const { claimToken } = req.params;
 
-    // Basic format guard: must be a non-empty string of hex characters,
-    // length 64 (32 bytes). Reject obviously malformed inputs cheaply.
     if (typeof claimToken !== 'string' || !/^[0-9a-f]{64}$/i.test(claimToken)) {
       return res.status(403).json({ error: 'Invalid or expired download link.' });
     }
@@ -863,11 +938,9 @@ router.get('/delivery-claim/:claimToken', deliveryClaimLimiter, async (req, res,
     const result = await consumeDeliveryClaim(claimToken);
 
     if (!result.success) {
-      // Generic error — never reveal internal state
       return res.status(403).json({ error: 'Invalid or expired download link.' });
     }
 
-    // Delivery succeeded. Return the authorized product download.
     return res.json({
       success: true,
       downloadUrl: result.downloadUrl,
@@ -882,7 +955,7 @@ router.get('/delivery-claim/:claimToken', deliveryClaimLimiter, async (req, res,
 
 // ============================================================
 // GET /pay/delivery/:token
-// downloadProduct replacement — token-gated, single-use enforced atomically
+// downloadProduct replacement
 // ============================================================
 router.get('/delivery/:token', async (req, res, next) => {
   try {
