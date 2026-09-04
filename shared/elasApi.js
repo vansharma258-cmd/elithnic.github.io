@@ -199,7 +199,7 @@
     login:    (data) => callApi('/auth/login', data),
     recover:  (data) => callApi('/auth/recover', data),
     changePassword: (data) => callApi('/auth/change-password', data),
-    listProducts:   () => callApi('/pay/products', null, { method: 'GET' }),
+    listProducts:   () => callApi('/pay/products', null, { method: 'GET', auth: true }),
     lookupCloser:   (data) => callApi('/pay/closer', data),
     createSale:     (data) => callApi('/pay/sale', data),
     prepareSale:    (data) => callApi('/pay/prepare-sale', data, { auth: true }),

@@ -1068,7 +1068,13 @@ async function loadDB(){
       const results = await Promise.all(collectionsToLoad.map(coll => fsdb.collection(coll).get()));
       const fresh = defaultDB();
       collectionsToLoad.forEach((coll, i) => {
-        fresh[coll] = results[i].docs.map(d => d.data());
+        let docs = results[i].docs.map(d => d.data());
+        // Strip ZIP fields from products for non-admin roles at cache-write time.
+        // DB.products is read by many UI paths — sanitize now so no accidental exposure.
+        if (coll === 'products' && typeof sanitizeProductsForRole === 'function') {
+          docs = sanitizeProductsForRole(docs);
+        }
+        fresh[coll] = docs;
       });
       // system/doc read removed — system/counters is now service-account only.
       // App reads saleIdCounter from the local cache; counter increments go via
@@ -1149,7 +1155,12 @@ function startRealtimeSync(){
   const collectionsToSync = FS_COLLECTIONS.filter(coll => coll !== 'users');
   collectionsToSync.forEach(coll => {
     const unsub = fsdb.collection(coll).onSnapshot(snapshot => {
-      DB[coll] = snapshot.docs.map(d => d.data());
+      let docs = snapshot.docs.map(d => d.data());
+      // Sanitize products: strip ZIP fields for non-admin roles at cache-write time.
+      if (coll === 'products' && typeof sanitizeProductsForRole === 'function') {
+        docs = sanitizeProductsForRole(docs);
+      }
+      DB[coll] = docs;
       saveLocalCache();
       debouncedRenderAll();
     }, err => console.error('[Firestore] Realtime sync error on', coll, err.message));
@@ -1279,6 +1290,26 @@ function visibleProductManagersForCurrentUser(){
   if(CURRENT_USER.role === 'admin') return productManagers();
   if(CURRENT_USER.role === 'senior_manager') return productManagers(CURRENT_USER.id);
   return [];
+}
+/**
+ * Strip privileged ZIP fields from a product object when the caller is not admin.
+ * Applied at cache-write time so DB.products is always safe to read from any role.
+ * Returns a new object — does not mutate the input.
+ */
+function sanitizeProductForClient(product){
+  if (!product) return product;
+  // Admins retain full product data including ZIP fields
+  if (CURRENT_USER && CURRENT_USER.role === 'admin') return product;
+  // Non-admin: remove all privileged delivery/credential fields
+  const safe = { ...product };
+  delete safe.zipUrl;
+  delete safe.zipPassword;
+  delete safe.zipStoragePath;
+  return safe;
+}
+/** Apply sanitizeProductForClient to an array of products. */
+function sanitizeProductsForRole(products){
+  return products.map(sanitizeProductForClient);
 }
 function productsVisibleToCurrentUser(){
   const all = getAll('products');
@@ -6125,21 +6156,25 @@ function renderMyTicketsView(){
    This replaces the old DB.users that was populated by loadDB().
    The callable enforces authorization so each role sees only their team. */
 async function loadUsersList(){
-  if (!FIREBASE_AVAILABLE || !window.ELAS_API) return; // offline / no API
+  // offline / no API — show empty state (not stuck loading)
+  if (!FIREBASE_AVAILABLE || !window.ELAS_API) {
+    if (typeof renderUsersTable === 'function') renderUsersTable();
+    return;
+  }
   try {
     const result = await window.ELAS_API.listUsers();
     if (result && Array.isArray(result.users)) {
       DB.users = result.users;
       saveLocalCache();
-      // Refresh the views that depend on this
       if (typeof renderUsersHierarchy === 'function') renderUsersHierarchy();
-      if (typeof renderUsersTable === 'function') renderUsersTable();
-      // Re-render the current view so the just-loaded users are visible
-      // (e.g. SM dashboard "Assigned Product Managers", PM dashboard "My Closers").
       if (typeof renderAll === 'function' && CURRENT_USER) renderAll();
     }
   } catch (e) {
     console.warn('[loadUsersList]', e.message);
+    toast('Could not load users list', 'error');
+  } finally {
+    // Always clear the "Loading…" state so the table is never stuck
+    if (typeof renderUsersTable === 'function') renderUsersTable();
   }
 }
 
