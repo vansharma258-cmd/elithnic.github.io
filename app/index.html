@@ -1340,11 +1340,48 @@ function showCredentialsModal(opts){
     <p style="font-size:13px;color:var(--text-dim);line-height:1.5;">${escapeHtml(note)}</p>
     <div class="detail-row"><span>Name</span><span class="cell-strong">${escapeHtml(name)}</span></div>
     <div class="detail-row"><span>Role</span><span><span class="role-pill role-${escapeHtml(opts.role||'')}">${escapeHtml(roleLabel)}</span></span></div>
-    <div class="detail-row"><span>Login ID</span><span class="cell-strong" style="font-family:ui-monospace,monospace;letter-spacing:0.04em;">${escapeHtml(loginId)}</span></div>
-    <div class="detail-row"><span>Password</span><span class="cell-strong" style="font-family:ui-monospace,monospace;letter-spacing:0.04em;">${escapeHtml(password)}</span></div>
+    <div class="detail-row"><span>Login ID</span>
+      <span class="cell-strong" style="font-family:ui-monospace,monospace;letter-spacing:0.04em;">${escapeHtml(loginId)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="copyUserCred('${escapeHtml(loginId)}')" style="margin-left:6px;font-size:11px;padding:2px 8px;">📋 Copy</button>
+    </div>
+    <div class="detail-row"><span>Password</span>
+      <span class="cell-strong" style="font-family:ui-monospace,monospace;letter-spacing:0.04em;">${escapeHtml(password)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="copyUserCred('${escapeHtml(password)}')" style="margin-left:6px;font-size:11px;padding:2px 8px;">📋 Copy</button>
+    </div>
     <div class="recovery-box" style="font-size:13px;margin-top:12px;">${escapeHtml(loginId)} / ${escapeHtml(password)}</div>
-    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal();renderAll();">Done</button></div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-primary" style="width:100%;" onclick="copyUserCred('${escapeHtml(loginId)}\\n${escapeHtml(password)}');this.textContent='✓ Copied to Clipboard';this.style.background='var(--green)';">
+        📋 Copy All Credentials
+      </button>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();renderAll();">Done</button></div>
   `);
+}
+
+function copyUserCred(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).catch(function(){
+      // Fallback for environments where clipboard API is restricted
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+  } else {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
 }
 
 const DSA_COMMISSION_SPLIT = 0.80; /* % of bank payout that goes to the DSA/hybrid closer (loan deals) */
@@ -6149,8 +6186,23 @@ async function submitCreateUser(){
     const result = await window.ELAS_API.createUser({ loginId, password, name, role, entityId, seniorManagerId });
     if (result && result.success) {
       logActivity('User', 'New user created: '+loginId.toUpperCase()+' ('+ROLE_LABELS[role]+')');
+      // Capture credentials BEFORE closeModal() wipes the form DOM
+      const savedLoginId = loginId;
+      const savedPassword = password;
+      const savedRoleLabel = ROLE_LABELS[role] || role;
       closeModal();
-      toast('User created successfully — Firebase Auth account provisioned', 'success');
+
+      // Show credentials confirmation using the existing shared modal
+      showCredentialsModal({
+        title: '✓ User Created — Save Credentials',
+        name: name,
+        role: role,
+        roleLabel: savedRoleLabel,
+        loginId: savedLoginId,
+        password: savedPassword,
+        note: 'Save these credentials now — the password cannot be recovered. Use Admin → Users → Reset Password if lost.',
+      });
+
       // Trigger a refresh so the users list reloads
       if (typeof renderUsersView === 'function') renderUsersView();
       if (typeof renderUsersTable === 'function') renderUsersTable();
