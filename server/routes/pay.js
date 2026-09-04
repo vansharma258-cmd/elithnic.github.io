@@ -232,7 +232,7 @@ router.post('/prepare-sale', async (req, res, next) => {
     if (!amount || amount <= 0) {
       return res.json({ success: false, error: 'Product has no valid price' });
     }
-    if (product.status && product.status !== 'active') {
+    if (product.status && product.status !== 'Active') {
       return res.json({ success: false, error: 'Product is not available' });
     }
 
