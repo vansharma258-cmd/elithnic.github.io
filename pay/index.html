@@ -629,6 +629,33 @@ async function loadPreCreatedSale(saleId){
     state.preSaleId = sale.saleId;
     state.preSaleData = sale;
     state.isPreCreated = true;
+    // Pre-populate state.customer from the sale's stored customer fields so the
+    // pay button enable/disable logic considers the closer-supplied values valid.
+    state.customer = {
+      name: (sale.customerName || '').trim(),
+      email: (sale.customerEmail || '').trim(),
+      phone: (sale.customerPhone || '').trim(),
+      company: (sale.customerCompany || '').trim(),
+    };
+    // Wire customer field listeners to the VISIBLE pre-created inputs (inside
+    // preCreatedSalePanels). Use querySelectorAll on the container so we never
+    // accidentally pick up the duplicate-ID fields in directCheckoutPanels.
+    // Attach BEFORE setVal so the pre-population triggers the listeners too.
+    prePanels.querySelectorAll('#custName,#custEmail,#custPhone,#custCompany').forEach(el => {
+      el.addEventListener('input', () => {
+        const key = el.id.replace('cust', '').toLowerCase();
+        state.customer[key] = el.value;
+        updatePayButton();
+      });
+    });
+
+    // Also write into the visible inputs so the customer sees what the closer sent.
+    // This triggers the listeners attached above, keeping state.customer in sync.
+    const setVal = (id, v) => { const el = prePanels.querySelector('#' + id); if (el && v) el.value = v; };
+    setVal('custName', state.customer.name);
+    setVal('custEmail', state.customer.email);
+    setVal('custPhone', state.customer.phone);
+    setVal('custCompany', state.customer.company);
     directPanels.style.display = 'none';
     prePanels.style.display = 'block';
     errorPanel.style.display = 'none';
@@ -670,47 +697,59 @@ function showSaleError(title, msg){
 
 /* ---------- Wire up UI ---------- */
 function init(){
-  // Check for pre-created sale in URL
+  const prePanels     = document.getElementById('preCreatedSalePanels');
+  const directPanels  = document.getElementById('directCheckoutPanels');
+
+  // Pre-created sale: attach click handler to payBtn.
+  // payBtn lives inside preCreatedSalePanels which is hidden until loadPreCreatedSale runs,
+  // but the element exists in the DOM so we can attach now.
+  const prePayBtn = document.getElementById('payBtn');
+  if (prePayBtn) prePayBtn.addEventListener('click', handlePay);
+
+  // Legacy direct checkout: attach click handler to payBtn2.
+  const payBtn2 = document.getElementById('payBtn2');
+  if (payBtn2) payBtn2.addEventListener('click', handlePay);
+
+  // Branch on saleId
   const urlParams = new URLSearchParams(window.location.search);
   const saleIdFromUrl = urlParams.get('saleId');
 
   if (saleIdFromUrl) {
+    // Pre-created sale flow: listeners for the pre-created customer fields are
+    // attached inside loadPreCreatedSale() once the panel is visible, so they
+    // always target the right (visible) elements. No listeners needed here.
     loadPreCreatedSale(saleIdFromUrl);
-    return;
+    // Do NOT return — the direct checkout listeners below are scoped to
+    // directCheckoutPanels so they are harmless when preCreatedSalePanels is active.
+  } else {
+    // No saleId: legacy direct checkout.
+    loadProducts();
+
+    // Closer ID — debounced lookup on input (legacy only, not in pre-created flow)
+    let closerTimer = null;
+    const closerInput = directPanels.querySelector('#closerIdInput');
+    if (closerInput) {
+      closerInput.addEventListener('input', () => {
+        clearTimeout(closerTimer);
+        closerTimer = setTimeout(lookupCloser, 400);
+      });
+      closerInput.addEventListener('blur', () => {
+        clearTimeout(closerTimer);
+        lookupCloser();
+      });
+    }
+
+    // Wire customer field listeners for the LEGACY flow, scoped to directCheckoutPanels
+    // so they never accidentally attach to pre-created fields with the same IDs.
+    ['custName','custEmail','custPhone','custCompany'].forEach(id => {
+      const el = directPanels.querySelector('#' + id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        state.customer[id.replace('cust','').toLowerCase()] = el.value;
+        updatePayButton();
+      });
+    });
   }
-
-  // No saleId: show the "use your link" message + the legacy direct checkout
-  // as a fallback. The legacy direct checkout is NOT the primary purchase path —
-  // a Closer must always create a payment link for the client.
-  loadProducts();
-
-  // Customer info
-  ['custName','custEmail','custPhone','custCompany'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', () => {
-      state.customer[id.replace('cust','').toLowerCase()] = el.value;
-      updatePayButton();
-    });
-  });
-
-  // Closer ID — debounced lookup on input
-  let closerTimer = null;
-  const closerInput = document.getElementById('closerIdInput');
-  if (closerInput) {
-    closerInput.addEventListener('input', () => {
-      clearTimeout(closerTimer);
-      closerTimer = setTimeout(lookupCloser, 400);
-    });
-    closerInput.addEventListener('blur', () => {
-      clearTimeout(closerTimer);
-      lookupCloser();
-    });
-  }
-
-  // Pay button (legacy direct checkout)
-  const payBtn = document.getElementById('payBtn2');
-  if (payBtn) payBtn.addEventListener('click', handlePay);
 }
 
 document.addEventListener('DOMContentLoaded', init);
