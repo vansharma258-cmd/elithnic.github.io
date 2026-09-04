@@ -1,9 +1,16 @@
 /* ===========================================================
    ELAS — Commission Service (Render Backend)
    ===========================================================
-   Adapted from functions/commissionService.js for Express/Render.
    Immutable attribution: Closer ₹30,000 / PM ₹5,000 / SM ₹5,000 / Admin ₹0.
    Idempotent via commission_locks.
+
+   Canonical data model:
+     users/{smId}     role=senior_manager
+     users/{pmId}      role=productmanager, seniorManagerId=smId
+     users/{closerId} role=closer, entityId=closerEntityId, managerId=pmId
+     closers/{closerEntityId} managerId=pmId
+
+   PMs and SMs live in the users/ collection — NOT managers/.
    =========================================================== */
 
 const admin = require('firebase-admin');
@@ -23,6 +30,7 @@ async function generateCommissionLedger(saleId, transactionId, sale) {
       return { success: false, error: 'Sale not verified' };
     }
 
+    // Attribution must come from the immutable sale document, not current hierarchy
     const closerId = sale.closerId;
     if (!closerId) {
       return { success: false, error: 'Sale missing closerId' };
@@ -30,24 +38,42 @@ async function generateCommissionLedger(saleId, transactionId, sale) {
 
     const db = admin.firestore();
 
+    // Step 1: Load the closer entity record
     const closerDoc = await db.collection('closers').doc(closerId).get();
     if (!closerDoc.exists) {
-      return { success: false, error: 'Closer not found' };
+      return { success: false, error: 'Closer entity not found' };
     }
     const closer = closerDoc.data();
+    // Resolve PM from the closer entity's managerId field
+    // (both assignedManagerId and managerId may be set; prefer assignedManagerId)
     const productManagerId = closer.assignedManagerId || closer.managerId;
     if (!productManagerId) {
-      return { success: false, error: 'Closer missing managerId (Product Manager)' };
+      return { success: false, error: 'Closer has no assigned Product Manager' };
     }
 
-    const pmDoc = await db.collection('managers').doc(productManagerId).get();
+    // Step 2: Load the PM user record from the canonical users/ collection
+    // PMs are stored in users/ with role=productmanager — NOT managers/ collection
+    const pmDoc = await db.collection('users').doc(productManagerId).get();
     if (!pmDoc.exists) {
-      return { success: false, error: 'Product Manager not found' };
+      return { success: false, error: 'Product Manager user not found in users/ collection' };
     }
     const pm = pmDoc.data();
+    if (pm.role !== 'productmanager') {
+      return { success: false, error: `User ${productManagerId} is not a Product Manager (role=${pm.role})` };
+    }
     const seniorManagerId = pm.seniorManagerId;
     if (!seniorManagerId) {
-      return { success: false, error: 'Product Manager missing seniorManagerId' };
+      return { success: false, error: 'Product Manager has no Senior Manager assigned' };
+    }
+
+    // Step 3: Verify the SM user record exists in users/ collection
+    const smDoc = await db.collection('users').doc(seniorManagerId).get();
+    if (!smDoc.exists) {
+      return { success: false, error: 'Senior Manager user not found in users/ collection' };
+    }
+    const sm = smDoc.data();
+    if (sm.role !== 'senior_manager') {
+      return { success: false, error: `User ${seniorManagerId} is not a Senior Manager (role=${sm.role})` };
     }
 
     const rates = getCommissionRates();
@@ -97,7 +123,7 @@ async function generateCommissionLedger(saleId, transactionId, sale) {
 
     await sendCommissionNotifications(saleId, closerId, productManagerId, seniorManagerId, rates);
 
-    console.log(`[Commission] Generated ledger for ${saleId}: closer=₹${rates.closer}, pm=₹${rates.productManager}, sm=₹${rates.seniorManager}`);
+    console.log(`[Commission] Generated ledger for ${saleId}: closer=₹${rates.closer} (${closerId}), pm=₹${rates.productManager} (${productManagerId}), sm=₹${rates.seniorManager} (${seniorManagerId})`);
     return { success: true, ledgerId: txResult.ledgerId, amounts: rates };
 
   } catch (err) {
@@ -110,42 +136,47 @@ async function sendCommissionNotifications(saleId, closerId, pmId, smId, rates) 
   const db = admin.firestore();
   const batch = db.batch();
 
-  const closerUserQuery = await db.collection('users').where('entityId', '==', closerId).where('role', '==', 'closer').limit(1).get();
+  // Notify closer — look up by entityId match in users/ collection
+  const closerUserQuery = await db.collection('users')
+    .where('entityId', '==', closerId)
+    .where('role', '==', 'closer')
+    .limit(1)
+    .get();
   if (!closerUserQuery.empty) {
-    const closerUser = closerUserQuery.docs[0].id;
+    const closerUserId = closerUserQuery.docs[0].id;
     const notifRef = db.collection('notifications').doc();
     batch.set(notifRef, {
       id: notifRef.id,
       message: `Sale ${saleId} verified — ₹${rates.closer.toLocaleString('en-IN')} commission added to your wallet`,
       type: 'success', read: false,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      targetUserId: closerUser, saleId
+      targetUserId: closerUserId, saleId
     });
   }
 
-  const pmUserQuery = await db.collection('users').where('entityId', '==', pmId).where('role', '==', 'productmanager').limit(1).get();
-  if (!pmUserQuery.empty) {
-    const pmUser = pmUserQuery.docs[0].id;
+  // Notify PM — look up by users/ doc ID directly (pmId IS the users/ doc ID)
+  const pmDoc = await db.collection('users').doc(pmId).get();
+  if (pmDoc.exists) {
     const notifRef = db.collection('notifications').doc();
     batch.set(notifRef, {
       id: notifRef.id,
       message: `Sale ${saleId} verified — ₹${rates.productManager.toLocaleString('en-IN')} manager commission credited`,
       type: 'success', read: false,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      targetUserId: pmUser, saleId
+      targetUserId: pmId, saleId
     });
   }
 
-  const smUserQuery = await db.collection('users').where('entityId', '==', smId).where('role', '==', 'senior_manager').limit(1).get();
-  if (!smUserQuery.empty) {
-    const smUser = smUserQuery.docs[0].id;
+  // Notify SM — look up by users/ doc ID directly (smId IS the users/ doc ID)
+  const smDoc = await db.collection('users').doc(smId).get();
+  if (smDoc.exists) {
     const notifRef = db.collection('notifications').doc();
     batch.set(notifRef, {
       id: notifRef.id,
       message: `Sale ${saleId} verified — ₹${rates.seniorManager.toLocaleString('en-IN')} senior manager commission credited`,
       type: 'success', read: false,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      targetUserId: smUser, saleId
+      targetUserId: smId, saleId
     });
   }
 

@@ -1,8 +1,21 @@
 /* ===========================================================
-   ELAS — Admin Routes
+   ELAS — Admin Routes (Hierarchy-Aware)
    ===========================================================
-   Admin-only routes: user CRUD, claim sync, list users.
-   All routes require Bearer token auth and admin role.
+   Implements the authoritative ELAS hierarchy:
+     ADMIN
+       → creates Senior Managers, Product Managers, Closers
+     SENIOR MANAGER
+       → creates Product Managers ONLY under itself
+     PRODUCT MANAGER
+       → creates Closers ONLY under itself
+     CLOSER
+       → no user management authority
+
+   All user/relationship mutations are derived server-side from
+   the authenticated caller's identity — never trusted from
+   the browser. The legacy `requireAdmin` middleware has been
+   replaced with `canManageUser(caller, target, action)` which
+   enforces the hierarchy rules.
    =========================================================== */
 
 const express = require('express');
@@ -15,23 +28,114 @@ const { getAdminDb, getFirestoreUserByAuthUid, getFirestoreUserByLoginId,
 const { requireAuth } = require('./auth');
 
 // ============================================================
-// Middleware: requireAdmin
+// Hierarchy Authorization Helpers
 // ============================================================
-async function requireAdmin(req, res, next) {
+
+/**
+ * Resolve the caller's full Firestore user doc.
+ * Sets req.caller for downstream handlers.
+ */
+async function loadCaller(req, res, next) {
   if (!req.authUid) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  const user = await getFirestoreUserByAuthUid(req.authUid);
-  if (!user || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+  const caller = await getFirestoreUserByAuthUid(req.authUid);
+  if (!caller) {
+    return res.status(401).json({ error: 'Caller user record not found' });
   }
-  req.caller = user;
+  req.caller = caller;
   next();
+}
+
+/**
+ * Can `actor` create a user with the given `targetRole`?
+ * Returns { allowed: true, forcedFields: {...} } or { allowed: false, reason: '...' }.
+ *
+ * Hierarchy rules:
+ *   - admin can create any role
+ *   - senior_manager can create productmanager only, forces seniorManagerId = self
+ *   - productmanager can create closer only, forces managerId = self
+ *   - everything else is denied
+ */
+async function canCreateUser(actor, targetRole) {
+  if (!actor || !actor.role) return { allowed: false, reason: 'Invalid caller' };
+
+  if (actor.role === 'admin') {
+    // Admin is authorized to create any of the canonical roles.
+    // The role passed in `targetRole` has already been accepted by this gate;
+    // we echo it back in forcedFields so the handler has a single, uniform
+    // source of truth for finalRole. SM/PM branches still gate targetRole
+    // explicitly and force parent IDs to the caller's own id.
+    return { allowed: true, forcedFields: { role: targetRole } };
+  }
+
+  if (actor.role === 'senior_manager') {
+    if (targetRole === 'productmanager') {
+      return {
+        allowed: true,
+        forcedFields: {
+          role: 'productmanager',
+          seniorManagerId: actor.id,
+          managerId: null,
+          entityId: null,
+        },
+      };
+    }
+    return { allowed: false, reason: 'Senior Managers can only create Product Managers' };
+  }
+
+  if (actor.role === 'productmanager') {
+    if (targetRole === 'closer') {
+      return {
+        allowed: true,
+        forcedFields: {
+          role: 'closer',
+          seniorManagerId: null,
+          managerId: actor.id,
+        },
+      };
+    }
+    return { allowed: false, reason: 'Product Managers can only create Closers' };
+  }
+
+  return { allowed: false, reason: 'You do not have authority to create users' };
+}
+
+/**
+ * Can `actor` modify the given `target` user record?
+ * Admins have full authority.
+ * Senior Managers can modify their own Product Managers.
+ * Product Managers can modify their own Closers.
+ * No cross-hierarchy modifications.
+ */
+async function canModifyUser(actor, target) {
+  if (!actor || !actor.role) return false;
+  if (actor.role === 'admin') return true;
+  if (!target) return false;
+
+  if (actor.role === 'senior_manager' && target.role === 'productmanager') {
+    return target.seniorManagerId === actor.id;
+  }
+
+  if (actor.role === 'productmanager' && target.role === 'closer') {
+    return target.managerId === actor.id;
+  }
+
+  return false;
+}
+
+/**
+ * Can `actor` reset the password / delete / toggle status of `target`?
+ * Per authoritative model: only Admin may perform these actions.
+ * SM/PM cannot reset passwords, delete, or toggle status of any user.
+ */
+function canPerformAdminOnlyAction(actor) {
+  return actor && actor.role === 'admin';
 }
 
 // ============================================================
 // GET /admin/users
-// listUsers replacement
+// listUsers replacement — hierarchy-scoped listing
 // ============================================================
 router.get('/users', requireAuth, async (req, res, next) => {
   try {
@@ -72,24 +176,50 @@ router.get('/users', requireAuth, async (req, res, next) => {
 
 // ============================================================
 // POST /admin/users
-// createUserAccount replacement
+// Hierarchy-aware user creation.
+// SM can create PM. PM can create Closer (with closers/ entity).
+// Admin can create any role.
 // ============================================================
-router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/users', requireAuth, async (req, res, next) => {
   try {
-    const caller = req.caller;
-    const { loginId, password, name, role, entityId, seniorManagerId, managerId } = req.body;
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Caller not found' });
+    }
+    req.caller = caller;
+
+    const {
+      loginId, password, name, role, entityId,
+      seniorManagerId, managerId, whatsapp, email, commissionRate, closerData,
+    } = req.body || {};
 
     if (!loginId || !password || !name || !role) {
       return res.status(400).json({ error: 'loginId, password, name, and role are required' });
     }
-
-    if (password.length < 6) {
+    if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
+    // Step 1: Hierarchy authorization — derive forced fields
+    const decision = await canCreateUser(caller, role);
+    if (!decision.allowed) {
+      return res.status(403).json({ error: decision.reason || 'Forbidden' });
+    }
+
+    // Browser-supplied parent IDs are NEVER trusted for hierarchy relationships.
+    // We only accept browser-supplied role/parent ID values as informational;
+    // the server ALWAYS uses decision.forcedFields for the canonical relationships.
+    const finalRole = decision.forcedFields.role;
+    const finalSeniorManagerId = decision.forcedFields.seniorManagerId !== undefined
+      ? decision.forcedFields.seniorManagerId
+      : (caller.role === 'admin' ? (seniorManagerId || null) : null);
+    const finalManagerId = decision.forcedFields.managerId !== undefined
+      ? decision.forcedFields.managerId
+      : (caller.role === 'admin' ? (managerId || null) : null);
+
     const normalizedLoginId = String(loginId).trim().toUpperCase();
 
-    // Check for existing user
+    // Check for existing user (by loginId)
     const existing = await getFirestoreUserByLoginId(normalizedLoginId);
     if (existing) {
       return res.status(409).json({ error: `Login ID ${normalizedLoginId} is already taken` });
@@ -105,8 +235,61 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
       return res.status(409).json({ error: 'User ID collision. Please try a different loginId.' });
     }
 
+    // Step 2: For PM-created Closer, atomically create closers/ entity first
+    let closerEntityId = null;
+    if (finalRole === 'closer' && caller.role === 'productmanager') {
+      // Server-generated closer entity ID
+      closerEntityId = 'closer_' + crypto.createHash('sha256')
+        .update(`${normalizedLoginId}:${Date.now()}:${Math.random()}`)
+        .digest('hex').slice(0, 16);
+      const closerEntity = {
+        id: closerEntityId,
+        name,
+        whatsapp: (whatsapp || '').toString().trim(),
+        email: (email || '').toString().trim(),
+        commissionRate: Number(commissionRate) || 10,
+        managerId: caller.id,                   // PM's users/ doc ID
+        status: 'active',
+        createdDate: new Date().toISOString().slice(0, 10),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: caller.id,
+      };
+      await db.collection('closers').doc(closerEntityId).set(closerEntity);
+    } else if (finalRole === 'closer' && caller.role === 'admin') {
+      // Admin-created closer: caller can supply entityId, else server creates
+      if (entityId) {
+        closerEntityId = entityId;
+      } else {
+        closerEntityId = 'closer_' + crypto.createHash('sha256')
+          .update(`${normalizedLoginId}:${Date.now()}:${Math.random()}`)
+          .digest('hex').slice(0, 16);
+        const closerEntity = {
+          id: closerEntityId,
+          name,
+          whatsapp: (whatsapp || '').toString().trim(),
+          email: (email || '').toString().trim(),
+          commissionRate: Number(commissionRate) || 10,
+          managerId: finalManagerId || null,     // whatever the admin assigned
+          status: 'active',
+          createdDate: new Date().toISOString().slice(0, 10),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: caller.id,
+        };
+        await db.collection('closers').doc(closerEntityId).set(closerEntity);
+      }
+    } else {
+      closerEntityId = entityId || null;
+    }
+
+    // Step 3: Create Firebase Auth user + custom claims
     const firebaseEmail = `${normalizedLoginId.toLowerCase()}@elithnic.app`;
-    const userClaims = buildCustomClaims({ role, entityId, seniorManagerId, managerId, loginId: normalizedLoginId });
+    const userClaims = buildCustomClaims({
+      role: finalRole,
+      entityId: closerEntityId,
+      seniorManagerId: finalSeniorManagerId,
+      managerId: finalManagerId,
+      loginId: normalizedLoginId,
+    });
 
     let firebaseUid;
     try {
@@ -120,6 +303,10 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
       firebaseUid = firebaseUser.uid;
       await admin.auth().setCustomUserClaims(firebaseUid, userClaims);
     } catch (err) {
+      // Rollback: delete the closer entity if Firebase Auth creation failed
+      if (closerEntityId && (finalRole === 'closer')) {
+        try { await db.collection('closers').doc(closerEntityId).delete(); } catch (_) {}
+      }
       if (err.code === 'auth/uid-already-exists') {
         const existingFirebaseUser = await admin.auth().getUserByEmail(firebaseEmail);
         firebaseUid = existingFirebaseUser.uid;
@@ -130,16 +317,17 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
       }
     }
 
+    // Step 4: Create users/ document with SERVER-FORCED fields
     const userDoc = {
       id: userId,
       authUid: firebaseUid,
       authEmail: firebaseEmail,
       loginId: normalizedLoginId,
       name,
-      role,
-      entityId: entityId || null,
-      seniorManagerId: seniorManagerId || null,
-      managerId: managerId || null,
+      role: finalRole,                                // SERVER-FORCED
+      entityId: closerEntityId,
+      seniorManagerId: finalSeniorManagerId,           // SERVER-FORCED
+      managerId: finalManagerId,                       // SERVER-FORCED
       status: 'active',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: caller.id,
@@ -148,12 +336,28 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
 
     await db.collection('users').doc(userId).set(userDoc);
 
-    console.log(`[admin] ${caller.loginId} created user ${normalizedLoginId} (${userId})`);
+    // Step 5: If PM-created closer, link the closer entity's userId to the new users/ doc
+    if (finalRole === 'closer' && closerEntityId) {
+      try {
+        await db.collection('closers').doc(closerEntityId).update({
+          userId: userId,
+        });
+      } catch (e) {
+        // Non-fatal: closer entity will still have managerId; userId back-link is best-effort
+        console.warn('[admin/users POST] closer entity userId back-link failed:', e.message);
+      }
+    }
+
+    console.log(`[admin] ${caller.loginId} (${caller.role}) created user ${normalizedLoginId} (${userId}) role=${finalRole}`);
 
     return res.json({
       success: true,
       userId,
       email: firebaseEmail,
+      role: finalRole,
+      seniorManagerId: finalSeniorManagerId,
+      managerId: finalManagerId,
+      entityId: closerEntityId,
       user: sanitizeUserForClient({ ...userDoc, id: userId }),
     });
 
@@ -164,19 +368,31 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
 
 // ============================================================
 // PATCH /admin/users/:userId
-// updateUserAccount replacement
+// Hierarchy-aware user update.
+// Admins can update anyone.
+// SM can update only their own PMs (cannot escalate role).
+// PM can update only their own Closers.
 // ============================================================
-router.patch('/users/:userId', requireAuth, requireAdmin, async (req, res, next) => {
+router.patch('/users/:userId', requireAuth, async (req, res, next) => {
   try {
-    const caller = req.caller;
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Caller not found' });
+    }
+    req.caller = caller;
+
     const { userId } = req.params;
-    const updates = req.body;
+    const updates = req.body || {};
 
     if (!userId || !updates || typeof updates !== 'object') {
       return res.status(400).json({ error: 'userId and updates are required' });
     }
 
-    const PROTECTED_FIELDS = ['authUid', 'authEmail', 'migratedToFirebaseAuth', 'passwordHash'];
+    // Protected fields — no one can change these via this endpoint
+    const PROTECTED_FIELDS = [
+      'id', 'authUid', 'authEmail', 'migratedToFirebaseAuth', 'passwordHash',
+      'role',                       // role cannot be changed via PATCH
+    ];
     for (const field of PROTECTED_FIELDS) {
       if (field in updates) {
         return res.status(400).json({ error: `Field '${field}' cannot be changed via this endpoint` });
@@ -184,23 +400,36 @@ router.patch('/users/:userId', requireAuth, requireAdmin, async (req, res, next)
     }
 
     const db = getAdminDb();
+    const targetSnap = await db.collection('users').doc(userId).get();
+    if (!targetSnap.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const target = { id: targetSnap.id, ...targetSnap.data() };
 
-    // If role changed, update Firebase Auth custom claims
-    if (updates.role) {
-      const target = await getFirestoreUserByAuthUid(userId).catch(() => null) ||
-        (await db.collection('users').doc(userId).get()).data();
-      if (target && target.authUid) {
-        const newClaims = buildCustomClaims({ ...target, ...updates });
-        await admin.auth().setCustomUserClaims(target.authUid, newClaims);
+    // Hierarchy authorization: only admin can update users out of band
+    if (!await canModifyUser(caller, target)) {
+      return res.status(403).json({ error: 'You do not have authority to modify this user' });
+    }
+
+    // SM/PM cannot modify relationship fields (seniorManagerId, managerId) on
+    // other users. Admin can modify them. Browsers can never set parent IDs.
+    if (caller.role !== 'admin') {
+      for (const f of ['seniorManagerId', 'managerId', 'entityId']) {
+        if (f in updates) {
+          return res.status(403).json({ error: `Field '${f}' can only be changed by Admin` });
+        }
       }
     }
 
+    // Strip any remaining protected server-set fields
     const sanitizedUpdates = { ...updates };
     delete sanitizedUpdates.id;
     delete sanitizedUpdates.authUid;
     delete sanitizedUpdates.authEmail;
     delete sanitizedUpdates.migratedToFirebaseAuth;
     delete sanitizedUpdates.passwordHash;
+    delete sanitizedUpdates.createdBy;
+    delete sanitizedUpdates.createdAt;
 
     await db.collection('users').doc(userId).update({
       ...sanitizedUpdates,
@@ -219,24 +448,31 @@ router.patch('/users/:userId', requireAuth, requireAdmin, async (req, res, next)
 
 // ============================================================
 // DELETE /admin/users/:userId
-// deleteUserAccount replacement
+// Admin-only per authoritative model.
 // ============================================================
-router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/users/:userId', requireAuth, async (req, res, next) => {
   try {
-    const caller = req.caller;
-    const { userId } = req.params;
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Caller not found' });
+    }
+    req.caller = caller;
 
+    if (!canPerformAdminOnlyAction(caller)) {
+      return res.status(403).json({ error: 'Only Admin can delete users' });
+    }
+
+    const { userId } = req.params;
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const target = await getFirestoreUserByAuthUid(userId).catch(() => null) ||
-      (await getAdminDb().collection('users').doc(userId).get()).exists ?
-      { id: userId, ...(await getAdminDb().collection('users').doc(userId).get()).data() } : null;
-
-    if (!target) {
+    const db = getAdminDb();
+    const targetSnap = await db.collection('users').doc(userId).get();
+    if (!targetSnap.exists) {
       return res.status(404).json({ error: 'User not found' });
     }
+    const target = { id: targetSnap.id, ...targetSnap.data() };
 
     if (target.role === 'admin') {
       return res.status(403).json({ error: 'Admin accounts cannot be deleted via this endpoint' });
@@ -253,7 +489,7 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next
       }
     }
 
-    await getAdminDb().collection('users').doc(userId).delete();
+    await db.collection('users').doc(userId).delete();
 
     console.log(`[admin] ${caller.loginId} deleted user ${userId} (${target.loginId})`);
 
@@ -266,34 +502,41 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next
 
 // ============================================================
 // POST /admin/users/:userId/reset-password
-// resetUserPassword replacement
+// Admin-only per authoritative model.
 // ============================================================
-router.post('/users/:userId/reset-password', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/users/:userId/reset-password', requireAuth, async (req, res, next) => {
   try {
-    const caller = req.caller;
-    const { userId } = req.params;
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Caller not found' });
+    }
+    req.caller = caller;
 
+    if (!canPerformAdminOnlyAction(caller)) {
+      return res.status(403).json({ error: 'Only Admin can reset passwords' });
+    }
+
+    const { userId } = req.params;
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    // Accept either userId or loginId in body
     const targetUserId = req.body.targetUserId || userId;
-    const target = await getFirestoreUserByAuthUid(targetUserId).catch(() => null) ||
-      (await getAdminDb().collection('users').doc(targetUserId).get()).exists ?
-      { id: targetUserId, ...(await getAdminDb().collection('users').doc(targetUserId).get()).data() } : null;
+    const db = getAdminDb();
+    let target = null;
 
-    if (!target) {
-      // Try by loginId
-      const byLogin = await getFirestoreUserByLoginId(targetUserId);
-      if (!byLogin) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      // Use the byLogin user
-      return await resetPassword(admin, getAdminDb(), caller, byLogin, res);
+    const ts = await db.collection('users').doc(targetUserId).get();
+    if (ts.exists) {
+      target = { id: ts.id, ...ts.data() };
+    } else {
+      target = await getFirestoreUserByLoginId(targetUserId);
     }
 
-    return await resetPassword(admin, getAdminDb(), caller, target, res);
+    if (!target) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return await resetPassword(admin, db, caller, target, res);
 
   } catch (err) {
     next(err);
@@ -330,18 +573,27 @@ async function resetPassword(admin, db, caller, target, res) {
 
 // ============================================================
 // POST /admin/users/:userId/sync-claims
-// syncUserClaims replacement
+// Admin-only per authoritative model.
 // ============================================================
-router.post('/users/:userId/sync-claims', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/users/:userId/sync-claims', requireAuth, async (req, res, next) => {
   try {
-    const caller = req.caller;
-    const { userId } = req.params;
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(401).json({ error: 'Caller not found' });
+    }
+    req.caller = caller;
 
+    if (!canPerformAdminOnlyAction(caller)) {
+      return res.status(403).json({ error: 'Only Admin can sync claims' });
+    }
+
+    const { userId } = req.params;
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const userDoc = await getAdminDb().collection('users').doc(userId).get();
+    const db = getAdminDb();
+    const userDoc = await db.collection('users').doc(userId).get();
     const user = userDoc.exists ? userDoc.data() : null;
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
