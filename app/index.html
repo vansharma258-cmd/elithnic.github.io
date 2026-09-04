@@ -6260,7 +6260,10 @@ async function submitAssignSenior(userId){
     closeModal(); toast('Hierarchy updated', 'success'); renderAll();
   } catch (e) {
     console.error('[submitAssignSenior]', e);
-    toast(e.message || 'Failed to update hierarchy', 'error');
+    const msg = (e.code === 'unreachable' || e.isNetworkError)
+      ? 'Unable to reach the server. Please try again in a moment.'
+      : (e.message || 'Failed to update hierarchy');
+    toast(msg, 'error');
   }
 }
 async function submitAssignManager(userId){
@@ -6313,7 +6316,10 @@ async function submitResetUserPassword(userId){
     }
   } catch (e) {
     console.error('[submitResetUserPassword]', e);
-    toast(e.message || 'Failed to reset password', 'error');
+    const msg = (e.code === 'unreachable' || e.isNetworkError)
+      ? 'Unable to reach the server. Please try again in a moment.'
+      : (e.message || 'Failed to reset password');
+    toast(msg, 'error');
   }
 }
 async function toggleUserStatus(userId){
@@ -6337,7 +6343,10 @@ async function toggleUserStatus(userId){
     renderUsersTable();
   } catch (e) {
     console.error('[toggleUserStatus]', e);
-    toast(e.message || 'Failed to update user status', 'error');
+    const msg = (e.code === 'unreachable' || e.isNetworkError)
+      ? 'Unable to reach the server. Please try again in a moment.'
+      : (e.message || 'Failed to update user status');
+    toast(msg, 'error');
   }
 }
 function confirmDeleteUser(userId, name){
@@ -6372,7 +6381,10 @@ async function doDeleteUser(userId, name){
     renderAll();
   } catch (e) {
     console.error('[doDeleteUser]', e);
-    toast(e.message || 'Failed to delete user', 'error');
+    const msg = (e.code === 'unreachable' || e.isNetworkError)
+      ? 'Unable to reach the server. Please try again in a moment.'
+      : (e.message || 'Failed to delete user');
+    toast(msg, 'error');
   }
 }
 

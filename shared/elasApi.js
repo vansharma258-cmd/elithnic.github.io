@@ -16,17 +16,44 @@
   // Or set it in your hosting config.
   const API_BASE = global.ELAS_API_BASE || 'https://elas-api.onrender.com';
 
+  // Default request timeout (ms). Render free-tier cold-start can take 30+ sec.
+  // 25s gives a clear timeout before the user's browser would.
+  const DEFAULT_TIMEOUT_MS = 25000;
+
+  // Categorize a fetch/network error into a user-friendly message.
+  // - Network failure (DNS, offline, CORS rejection) → 'unreachable'
+  // - Timeout → 'timeout'
+  // - Empty/non-JSON response from server → 'invalid-response'
+  // - 401/403 → 'auth' (caller should re-login or check perms)
+  // - 4xx other → 'client' (validation, not found, etc.) — keep server message
+  // - 5xx → 'server' (backend failure) — keep server message if present
+  function classifyError(err) {
+    if (!err) return { code: 'unknown', message: 'Unknown error' };
+    const msg = String(err.message || err);
+
+    // AbortController timeout
+    if (err.name === 'AbortError' || /aborted|timeout/i.test(msg)) {
+      return { code: 'timeout', message: 'The server took too long to respond. Please try again in a moment.' };
+    }
+    // Browser-level network failure (CORS, offline, DNS, reset)
+    if (err.name === 'TypeError' && /fetch/i.test(msg)) {
+      return { code: 'unreachable', message: 'Unable to reach the server. Please check your connection and try again.' };
+    }
+    return { code: 'unknown', message: msg };
+  }
+
   /**
    * Call a Render API endpoint.
    * @param {string} path  - e.g. '/auth/login'
-   * @param {object} data  - request body (will be wrapped in { data: ... } for compatibility)
-   * @param {object} options - { auth: 'idToken', method: 'GET' | 'POST' | 'PATCH' | 'DELETE' }
+   * @param {object} data  - request body
+   * @param {object} options - { auth: 'idToken', method: 'GET'|'POST'|'PATCH'|'DELETE', timeout: number }
    * @returns {Promise<object>}
    */
   async function callApi(path, data, options) {
     options = options || {};
     const method = options.method || 'POST';
     const useAuth = options.auth;
+    const timeoutMs = options.timeout || DEFAULT_TIMEOUT_MS;
 
     const headers = { 'Content-Type': 'application/json' };
 
@@ -36,6 +63,7 @@
         headers['Authorization'] = 'Bearer ' + token;
       } catch (e) {
         console.warn('[elasApi] Failed to get auth token:', e.message);
+        // Continue without auth — server will return a proper 401, which the caller can handle
       }
     }
 
@@ -43,33 +71,83 @@
     if (method === 'GET' || method === 'DELETE') {
       body = undefined;
     } else {
-      // Direct JSON body for Express backend
       body = JSON.stringify(data || {});
     }
 
-    const resp = await fetch(API_BASE + path, {
-      method,
-      headers,
-      body,
-    });
+    // Timeout via AbortController — prevents indefinite hangs on Render cold-start
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    let json;
+    let resp;
     try {
-      json = await resp.json();
+      resp = await fetch(API_BASE + path, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      });
     } catch (e) {
-      throw new Error('Invalid response from server');
+      clearTimeout(timeoutId);
+      const classified = classifyError(e);
+      const err = new Error(classified.message);
+      err.code = classified.code;
+      err.isNetworkError = true;
+      throw err;
+    }
+    clearTimeout(timeoutId);
+
+    // Parse JSON response. Tolerate non-JSON / empty bodies (e.g. Render 502 with HTML).
+    let json = null;
+    let parseError = null;
+    try {
+      const text = await resp.text();
+      if (text) {
+        try { json = JSON.parse(text); }
+        catch (e) { parseError = 'Non-JSON response from server'; }
+      }
+    } catch (e) {
+      parseError = 'Could not read server response';
     }
 
     if (!resp.ok) {
-      // Mimic Firebase HttpsError shape
-      const err = new Error(json.error || `HTTP ${resp.status}`);
-      err.code = resp.status === 401 ? 'unauthenticated' :
-                 resp.status === 403 ? 'permission-denied' :
-                 resp.status === 404 ? 'not-found' :
-                 resp.status === 409 ? 'already-exists' :
-                 resp.status === 429 ? 'resource-exhausted' :
-                 'internal';
+      // Use server's error message if available, otherwise a contextual one
+      const serverMessage = json && json.error;
+      let errMessage, errCode;
+
+      if (resp.status === 401) {
+        errCode = 'unauthenticated';
+        errMessage = serverMessage || 'Your session has expired. Please sign in again.';
+      } else if (resp.status === 403) {
+        errCode = 'permission-denied';
+        errMessage = serverMessage || 'You do not have permission to perform this action.';
+      } else if (resp.status === 404) {
+        errCode = 'not-found';
+        errMessage = serverMessage || 'The requested resource was not found.';
+      } else if (resp.status === 409) {
+        errCode = 'already-exists';
+        errMessage = serverMessage || 'This record already exists.';
+      } else if (resp.status === 429) {
+        errCode = 'resource-exhausted';
+        errMessage = serverMessage || 'Too many requests. Please try again in a moment.';
+      } else if (resp.status >= 500) {
+        errCode = 'server';
+        errMessage = serverMessage || 'The server encountered an error. Please try again in a moment.';
+      } else {
+        errCode = 'client';
+        errMessage = serverMessage || `Request failed (HTTP ${resp.status}).`;
+      }
+
+      const err = new Error(errMessage);
+      err.code = errCode;
+      err.status = resp.status;
       err.details = json;
+      throw err;
+    }
+
+    if (parseError && !json) {
+      const err = new Error(parseError);
+      err.code = 'invalid-response';
+      err.status = resp.status;
       throw err;
     }
 
@@ -80,7 +158,6 @@
    * Helper for Firebase-compatible callable shape: { data: ... }
    */
   async function callable(name, data) {
-    // Map legacy callable name to path
     const path = CALLABLE_PATHS[name] || ('/callable/' + name);
     return await callApi(path, data);
   }
@@ -104,12 +181,10 @@
 
   /**
    * Call a callable function by name.
-   * This is the direct replacement for firebase.functions().httpsCallable(name).
-   * It returns { data: ... } to match the Firebase callable shape.
+   * Returns { data: ... } to match the Firebase callable shape.
    */
   async function callCallable(name, data) {
     const result = await callable(name, data);
-    // Firebase callable always returns { data: ... } — wrap if not already
     if (result && typeof result === 'object' && 'data' in result) {
       return result;
     }
