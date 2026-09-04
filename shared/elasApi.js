@@ -211,5 +211,10 @@
     deleteUser:     (id) => callApi('/admin/users/' + encodeURIComponent(id), null, { method: 'DELETE', auth: true }),
     resetPassword:  (id, data) => callApi('/admin/users/' + encodeURIComponent(id) + '/reset-password', data || {}, { auth: true }),
     syncClaims:     (id) => callApi('/admin/users/' + encodeURIComponent(id) + '/sync-claims', {}, { auth: true }),
+    // Product distribution endpoints
+    getProduct:           (id) => callApi('/admin/products/' + encodeURIComponent(id), null, { method: 'GET', auth: true }),
+    assignSeniorManagers: (id, seniorManagerIds) => callApi('/admin/products/' + encodeURIComponent(id) + '/assign-senior-managers', { seniorManagerIds }, { auth: true }),
+    assignManagers:       (id, managerIds)         => callApi('/admin/products/' + encodeURIComponent(id) + '/assign-managers', { managerIds }, { auth: true }),
+    assignClosers:        (id, closerIds)          => callApi('/admin/products/' + encodeURIComponent(id) + '/assign-closers', { closerIds }, { auth: true }),
   };
 })(window);

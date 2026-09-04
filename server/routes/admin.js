@@ -625,4 +625,307 @@ function generateTempPassword() {
   return pwd;
 }
 
+// ============================================================
+// Product Distribution Endpoints
+// (All use Firebase Admin SDK server-side; no Firestore rules change needed)
+// ============================================================
+
+/**
+ * Helper: union-assign unique IDs to an array field.
+ * Returns the merged array.
+ */
+function unionIds(existing, additions) {
+  const set = new Set(Array.isArray(existing) ? existing : []);
+  for (const id of (additions || [])) {
+    if (typeof id === 'string' && id.length) set.add(id);
+  }
+  return Array.from(set);
+}
+
+/**
+ * POST /admin/products/:productId/assign-senior-managers
+ * ADMIN-only. Sets products/{productId}.assignedSeniorManagerIds.
+ * Body: { seniorManagerIds: [smId, ...] }
+ * Browser-supplied seniorManagerIds are replaced (after validation).
+ */
+router.post('/products/:productId/assign-senior-managers', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) return res.status(401).json({ error: 'Caller not found' });
+    req.caller = caller;
+
+    if (!canPerformAdminOnlyAction(caller)) {
+      return res.status(403).json({ error: 'Only Admin can assign products to Senior Managers' });
+    }
+
+    const { productId } = req.params;
+    const { seniorManagerIds } = req.body || {};
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    if (!Array.isArray(seniorManagerIds)) {
+      return res.status(400).json({ error: 'seniorManagerIds must be an array' });
+    }
+
+    const db = getAdminDb();
+    const productRef = db.collection('products').doc(productId);
+    const productSnap = await productRef.get();
+    if (!productSnap.exists) return res.status(404).json({ error: 'Product not found' });
+
+    // Validate every ID — must exist and have role === 'senior_manager'
+    const validated = [];
+    for (const id of seniorManagerIds) {
+      if (typeof id !== 'string' || !id.length) continue;
+      const u = await db.collection('users').doc(id).get();
+      if (!u.exists) {
+        return res.status(400).json({ error: `User ${id} not found` });
+      }
+      if (u.data().role !== 'senior_manager') {
+        return res.status(400).json({ error: `User ${id} is not a Senior Manager` });
+      }
+      validated.push(id);
+    }
+
+    // Atomic update: replace assignedSeniorManagerIds with the validated set.
+    // Do NOT touch assignedManagerIds or assignedCloserIds — they belong to
+    // SM/PM distribution, not Admin's job.
+    await productRef.update({
+      assignedSeniorManagerIds: Array.from(new Set(validated)),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: caller.id,
+    });
+
+    console.log(`[admin] ${caller.loginId} assigned product ${productId} to SMs:`, validated);
+    return res.json({ success: true, assignedSeniorManagerIds: validated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /admin/products/:productId/assign-managers
+ * SM-only. Adds PMs to products/{productId}.assignedManagerIds.
+ * Server checks:
+ *  - caller.role === 'senior_manager'
+ *  - caller.id is already in product.assignedSeniorManagerIds
+ *  - every target PM has role=productmanager AND seniorManagerId === caller.id
+ */
+router.post('/products/:productId/assign-managers', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) return res.status(401).json({ error: 'Caller not found' });
+    req.caller = caller;
+
+    if (caller.role !== 'senior_manager') {
+      return res.status(403).json({ error: 'Only Senior Managers can distribute products to Product Managers' });
+    }
+
+    const { productId } = req.params;
+    const { managerIds } = req.body || {};
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    if (!Array.isArray(managerIds)) {
+      return res.status(400).json({ error: 'managerIds must be an array' });
+    }
+
+    const db = getAdminDb();
+    const productRef = db.collection('products').doc(productId);
+    const productSnap = await productRef.get();
+    if (!productSnap.exists) return res.status(404).json({ error: 'Product not found' });
+    const product = productSnap.data();
+
+    // Caller must already be in assignedSeniorManagerIds
+    const assignedSm = Array.isArray(product.assignedSeniorManagerIds) ? product.assignedSeniorManagerIds : [];
+    if (!assignedSm.includes(caller.id)) {
+      return res.status(403).json({ error: 'You are not authorized to distribute this product' });
+    }
+
+    // Validate every target PM
+    const validated = [];
+    for (const id of managerIds) {
+      if (typeof id !== 'string' || !id.length) continue;
+      const u = await db.collection('users').doc(id).get();
+      if (!u.exists) {
+        return res.status(400).json({ error: `User ${id} not found` });
+      }
+      const data = u.data();
+      if (data.role !== 'productmanager') {
+        return res.status(400).json({ error: `User ${id} is not a Product Manager` });
+      }
+      if (data.seniorManagerId !== caller.id) {
+        return res.status(400).json({ error: `Product Manager ${id} is not under your authority` });
+      }
+      validated.push(id);
+    }
+
+    // Merge: preserve existing PMs from OTHER SMs (admins assigned to other SMs'
+    // products), only add SM's own validated PMs.
+    const existing = Array.isArray(product.assignedManagerIds) ? product.assignedManagerIds : [];
+    const merged = unionIds(existing, validated);
+
+    await productRef.update({
+      assignedManagerIds: merged,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: caller.id,
+    });
+
+    console.log(`[admin] SM ${caller.loginId} distributed product ${productId} to PMs:`, validated);
+    return res.json({ success: true, added: validated, assignedManagerIds: merged });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /admin/products/:productId/assign-closers
+ * PM-only. Adds Closer entity IDs to products/{productId}.assignedCloserIds.
+ * Server checks:
+ *  - caller.role === 'productmanager'
+ *  - caller.id is already in product.assignedManagerIds
+ *  - every target closer entity has managerId === caller.id
+ *  - the corresponding user doc also has role=closer AND managerId === caller.id
+ */
+router.post('/products/:productId/assign-closers', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) return res.status(401).json({ error: 'Caller not found' });
+    req.caller = caller;
+
+    if (caller.role !== 'productmanager') {
+      return res.status(403).json({ error: 'Only Product Managers can distribute products to Closers' });
+    }
+
+    const { productId } = req.params;
+    const { closerIds } = req.body || {};
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    if (!Array.isArray(closerIds)) {
+      return res.status(400).json({ error: 'closerIds must be an array' });
+    }
+
+    const db = getAdminDb();
+    const productRef = db.collection('products').doc(productId);
+    const productSnap = await productRef.get();
+    if (!productSnap.exists) return res.status(404).json({ error: 'Product not found' });
+    const product = productSnap.data();
+
+    // Caller PM must already be in assignedManagerIds
+    const assignedMgr = Array.isArray(product.assignedManagerIds) ? product.assignedManagerIds : [];
+    if (!assignedMgr.includes(caller.id)) {
+      return res.status(403).json({ error: 'You are not authorized to distribute this product' });
+    }
+
+    // Validate every target closer
+    const validated = [];
+    for (const id of closerIds) {
+      if (typeof id !== 'string' || !id.length) continue;
+      // closerId is the entity doc id in closers/ collection
+      const closerEntity = await db.collection('closers').doc(id).get();
+      if (!closerEntity.exists) {
+        return res.status(400).json({ error: `Closer ${id} not found` });
+      }
+      const entity = closerEntity.data();
+      if (entity.managerId !== caller.id) {
+        return res.status(400).json({ error: `Closer ${id} is not under your authority` });
+      }
+      // Also verify the linked users/ doc is a closer under this PM
+      const usersQuery = await db.collection('users')
+        .where('entityId', '==', id)
+        .where('role', '==', 'closer')
+        .limit(1).get();
+      if (usersQuery.empty) {
+        return res.status(400).json({ error: `Closer ${id} has no matching user account` });
+      }
+      const userDoc = usersQuery.docs[0].data();
+      if (userDoc.managerId !== caller.id) {
+        return res.status(400).json({ error: `Closer ${id} user account is not under your authority` });
+      }
+      validated.push(id);
+    }
+
+    // Merge with existing closerIds (don't drop other PMs' assignments)
+    const existing = Array.isArray(product.assignedCloserIds) ? product.assignedCloserIds : [];
+    const merged = unionIds(existing, validated);
+
+    await productRef.update({
+      assignedCloserIds: merged,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: caller.id,
+    });
+
+    console.log(`[admin] PM ${caller.loginId} distributed product ${productId} to closers:`, validated);
+    return res.json({ success: true, added: validated, assignedCloserIds: merged });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /admin/products/:productId
+ * Authenticated. Returns product detail with role-based ZIP field exclusion.
+ * - admin: full document including zipUrl, zipPassword, zipStoragePath
+ * - senior_manager, productmanager, closer: metadata only (no ZIP fields)
+ * Hierarchy check: non-admin can only see products assigned to them.
+ */
+router.get('/products/:productId', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) return res.status(401).json({ error: 'Caller not found' });
+    req.caller = caller;
+
+    const { productId } = req.params;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+
+    const db = getAdminDb();
+    const productRef = db.collection('products').doc(productId);
+    const productSnap = await productRef.get();
+    if (!productSnap.exists) return res.status(404).json({ error: 'Product not found' });
+    const product = { id: productSnap.id, ...productSnap.data() };
+
+    const role = caller.role;
+    let authorized = false;
+    if (role === 'admin') {
+      authorized = true;
+    } else if (role === 'senior_manager') {
+      const smIds = Array.isArray(product.assignedSeniorManagerIds) ? product.assignedSeniorManagerIds : [];
+      authorized = smIds.includes(caller.id);
+    } else if (role === 'productmanager') {
+      const pmIds = Array.isArray(product.assignedManagerIds) ? product.assignedManagerIds : [];
+      authorized = pmIds.includes(caller.id);
+    } else if (role === 'closer') {
+      const closerIds = Array.isArray(product.assignedCloserIds) ? product.assignedCloserIds : [];
+      const entityId = caller.entityId;
+      authorized = !!entityId && closerIds.includes(entityId);
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ error: 'You are not authorized to view this product' });
+    }
+
+    // Role-based field exposure
+    const safe = {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      category: product.category,
+      tags: product.tags,
+      imageUrl: product.imageUrl,
+      featured: product.featured,
+      purposeVideoUrl: product.purposeVideoUrl || null,
+      setupVideoUrl: role === 'admin' ? (product.setupVideoUrl || null) : null,
+      status: product.status,
+      assignedSeniorManagerIds: role === 'admin' ? (product.assignedSeniorManagerIds || []) : undefined,
+      assignedManagerIds: (role === 'admin' || role === 'senior_manager') ? (product.assignedManagerIds || []) : undefined,
+      assignedCloserIds: (role === 'admin' || role === 'senior_manager' || role === 'productmanager') ? (product.assignedCloserIds || []) : undefined,
+    };
+
+    if (role === 'admin') {
+      safe.zipUrl = product.zipUrl || null;
+      safe.zipPassword = product.zipPassword || null;
+      safe.zipStoragePath = product.zipStoragePath || null;
+    }
+
+    return res.json({ product: safe });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

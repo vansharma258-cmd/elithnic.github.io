@@ -1303,6 +1303,10 @@ function productsVisibleToCurrentUser(){
 }
 function canDeleteProducts(){ return CURRENT_USER && CURRENT_USER.role === 'admin'; }
 function canManagePasswords(){ return CURRENT_USER && CURRENT_USER.role === 'admin'; }
+function canDistributeProducts(){
+  // SM distributes to PMs, PM distributes to Closers. Admin uses a different modal.
+  return CURRENT_USER && (CURRENT_USER.role === 'senior_manager' || CURRENT_USER.role === 'productmanager');
+}
 function generateSecureLoginId(prefix){
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const arr = new Uint8Array(10);
@@ -1768,6 +1772,11 @@ function showApp(){
   renderAll();
   navigateTo('dashboard');
   startRealtimeSync();
+  // Load the full hierarchy so productManagers(), seniorManagers(), closersForManager()
+  // etc. work for every role — not just the admin who visits the Users view.
+  // listUsers() is server-authoritative and returns the correct scoped slice for
+  // each role (admin sees all, SM sees team, PM sees team, Closer sees []).
+  loadUsersList();
 }
 function applyRoleUI(){
   const u = CURRENT_USER;
@@ -5097,6 +5106,7 @@ function renderProductsTable(){
   if(!rows.length){ wrap.innerHTML = emptyState('⊞','No products found','Add your first digital product — app, ebook, template or course — to get started.'); return; }
   const canDelete = canDeleteProducts();
   const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'productmanager');
+  const canManage = canDistributeProducts();
   wrap.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
     <th>Product Name</th><th>Category</th><th>Price</th><th>Assigned Closers</th><th>Sales</th><th>Revenue</th><th>Status</th><th></th>
   </tr></thead><tbody>
@@ -5114,6 +5124,7 @@ function renderProductsTable(){
         <td><span class="badge ${p.status==='Active'?'badge-closed':p.status==='Draft'?'badge-new':'badge-lost'}">${p.status}</span></td>
         <td><div class="row-actions">
           ${canEdit ? `<button class="btn btn-ghost btn-icon" onclick="openProductModal('${p.id}')" title="Edit">✎</button>` : ''}
+          ${!canEdit && canManage ? `<button class="btn btn-ghost btn-icon" onclick="openProductModal('${p.id}')" title="Distribute">⤴</button>` : ''}
           <button class="btn btn-ghost btn-icon" onclick="openProductDetail('${p.id}')" title="Detail">⊕</button>
           ${canDelete ? `<button class="btn btn-danger btn-icon" onclick="deleteProduct('${p.id}','${escapeHtml(p.name)}')" title="Delete">🗑</button>` : ''}
         </div></td>
@@ -5123,16 +5134,20 @@ function renderProductsTable(){
 }
 
 function openProductModal(productId){
+  const role = CURRENT_USER && CURRENT_USER.role;
+  // Non-admin roles do not edit product details. They get a distribution-only modal
+  // that calls server-side endpoints; the Admin-only core fields are not shown.
+  if (role === 'senior_manager') return openProductDistributeToPMsModal(productId);
+  if (role === 'productmanager') return openProductDistributeToClosersModal(productId);
+
+  // Admin: full create/edit modal
   const p = productId ? getById('products', productId) : null;
-  const closers = (CURRENT_USER && CURRENT_USER.role === 'productmanager')
-    ? closersForManager(CURRENT_USER.id)
-    : getAll('closers');
-  const assignedCloserIds = p ? (p.assignedCloserIds||[]) : [];
-  const assignedManagerIds = p ? (p.assignedManagerIds||[]) : [];
-  const assignedSeniorManagerIds = p ? (p.assignedSeniorManagerIds||[]) : [];
   const allPMs = productManagers();
   const allSMs = seniorManagers();
   const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  const assignedCloserIds = p ? (p.assignedCloserIds||[]) : [];
+  const assignedManagerIds = p ? (p.assignedManagerIds||[]) : [];
+  const assignedSeniorManagerIds = p ? (p.assignedSeniorManagerIds||[]) : [];
   renderModal(`
     <div class="modal-head"><div class="modal-title">${p?'Edit Product':'Add New Product'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="form-grid2">
@@ -5160,18 +5175,18 @@ function openProductModal(productId){
         <label for="sm_${sm.id}">${escapeHtml(sm.name)}</label></div>
       `).join('') : '<p style="font-size:12px;color:var(--text-faint);">No senior managers yet.</p>'}
     </div>
-    <div class="detail-section-title">Assign Product Managers</div>
-    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Tick the Product Managers responsible for this product. They can then assign it to their Closers.</p>
+    <div class="detail-section-title">Distribute to Product Managers (after Admin assigns the SM)</div>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Admins can also pre-assign Product Managers here. Each Senior Manager's distribution to their own PMs is then managed in the Senior Manager's own product view.</p>
     <div id="managerCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:120px;overflow-y:auto;margin-bottom:12px;">
       ${allPMs.length ? allPMs.map(m=>`
         <div class="check-field"><input type="checkbox" id="pm_${m.id}" ${assignedManagerIds.includes(m.id)?'checked':''}>
         <label for="pm_${m.id}">${escapeHtml(m.name)}</label></div>
       `).join('') : '<p style="font-size:12px;color:var(--text-faint);">No product managers yet.</p>'}
     </div>` : ''}
-    <div class="detail-section-title">Assign Closers</div>
+    <div class="detail-section-title">Direct Closer Assignment (Admin only — optional)</div>
     <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Tick the closers who will sell this product. They will see the purpose video and product info — not the ZIP or password.</p>
     <div id="closerCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:160px;overflow-y:auto;">
-      ${closers.length ? closers.map(c=>`
+      ${getAll('closers').length ? getAll('closers').map(c=>`
         <div class="check-field"><input type="checkbox" id="pc_${c.id}" ${assignedCloserIds.includes(c.id)?'checked':''}>
         <label for="pc_${c.id}">${escapeHtml(c.name)}</label></div>
       `).join('') : '<p style="font-size:12px;color:var(--text-faint);">No closers exist yet — add closers first.</p>'}
@@ -5184,7 +5199,112 @@ function openProductModal(productId){
     </div>
   `);
 }
+
+/**
+ * SM-only: distribute an assigned product to PMs under the SM.
+ * Server endpoint: POST /admin/products/:id/assign-managers
+ */
+function openProductDistributeToPMsModal(productId){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'senior_manager') {
+    toast('Only Senior Managers can distribute products here', 'error'); return;
+  }
+  const p = getById('products', productId);
+  if (!p) { toast('Product not found', 'error'); return; }
+  const myPMs = productManagers(CURRENT_USER.id);
+  const currentAssignments = (p.assignedManagerIds || []).filter(pmId => myPMs.some(pm => pm.id === pmId));
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Distribute to My Product Managers</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">
+      Select the Product Managers from your team who should receive
+      <strong>${escapeHtml(p.name)}</strong>. They will be able to distribute it to their own Closers.
+    </p>
+    <div id="smPmCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:12px;">
+      ${myPMs.length ? myPMs.map(m=>`
+        <div class="check-field"><input type="checkbox" id="smpm_${m.id}" ${currentAssignments.includes(m.id)?'checked':''}>
+        <label for="smpm_${m.id}">${escapeHtml(m.name)} <span class="cell-dim" style="font-size:11px;">(${escapeHtml(m.loginId)})</span></label></div>
+      `).join('') : '<p style="font-size:12px;color:var(--text-faint);">You have no Product Managers yet.</p>'}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSMAssignPMs('${productId}')">Save Distribution</button>
+    </div>
+  `);
+}
+async function submitSMAssignPMs(productId){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'senior_manager') {
+    toast('Only Senior Managers can do this', 'error'); return;
+  }
+  const myPMs = productManagers(CURRENT_USER.id);
+  const selected = myPMs.filter(m => document.getElementById('smpm_'+m.id)?.checked).map(m=>m.id);
+  const btn = document.querySelector('.modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try {
+    await window.ELAS_API.assignManagers(productId, selected);
+    logActivity('Marketplace', 'SM distributed product to PMs: ' + selected.length);
+    closeModal();
+    toast('Distribution saved', 'success');
+    renderAll();
+  } catch (err) {
+    toast(err.message || 'Failed to save distribution', 'error');
+    if(btn){ btn.disabled=false; btn.textContent='Save Distribution'; }
+  }
+}
+
+/**
+ * PM-only: distribute an assigned product to Closers under the PM.
+ * Server endpoint: POST /admin/products/:id/assign-closers
+ */
+function openProductDistributeToClosersModal(productId){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'productmanager') {
+    toast('Only Product Managers can distribute products here', 'error'); return;
+  }
+  const p = getById('products', productId);
+  if (!p) { toast('Product not found', 'error'); return; }
+  const myClosers = closersForManager(CURRENT_USER.id);
+  const currentAssignments = (p.assignedCloserIds || []).filter(cid => myClosers.some(c => c.id === cid));
+  renderModal(`
+    <div class="modal-head"><div class="modal-title">Distribute to My Closers</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:14px;">
+      Select the Closers from your team who should receive
+      <strong>${escapeHtml(p.name)}</strong>. They will see the purpose video and product info — not the ZIP or password — and can generate payment links for it.
+    </p>
+    <div id="pmCloserCheckboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:12px;">
+      ${myClosers.length ? myClosers.map(c=>`
+        <div class="check-field"><input type="checkbox" id="pmpc_${c.id}" ${currentAssignments.includes(c.id)?'checked':''}>
+        <label for="pmpc_${c.id}">${escapeHtml(c.name)} <span class="cell-dim" style="font-size:11px;">(${escapeHtml(c.whatsapp||'—')})</span></label></div>
+      `).join('') : '<p style="font-size:12px;color:var(--text-faint);">You have no Closers yet.</p>'}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPMAssignClosers('${productId}')">Save Distribution</button>
+    </div>
+  `);
+}
+async function submitPMAssignClosers(productId){
+  if (!CURRENT_USER || CURRENT_USER.role !== 'productmanager') {
+    toast('Only Product Managers can do this', 'error'); return;
+  }
+  const myClosers = closersForManager(CURRENT_USER.id);
+  const selected = myClosers.filter(c => document.getElementById('pmpc_'+c.id)?.checked).map(c=>c.id);
+  const btn = document.querySelector('.modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try {
+    await window.ELAS_API.assignClosers(productId, selected);
+    logActivity('Marketplace', 'PM distributed product to closers: ' + selected.length);
+    closeModal();
+    toast('Distribution saved', 'success');
+    renderAll();
+  } catch (err) {
+    toast(err.message || 'Failed to save distribution', 'error');
+    if(btn){ btn.disabled=false; btn.textContent='Save Distribution'; }
+  }
+}
+
 async function submitProductForm(productId){
+  // Only Admin reaches this path (SM/PM are routed to their distribution modals)
+  if (!(CURRENT_USER && CURRENT_USER.role === 'admin')) {
+    toast('Only Admin can edit product details', 'error'); return;
+  }
   const name = document.getElementById('prd_name').value.trim();
   const price = parseFloat(document.getElementById('prd_price').value)||0;
   if(!name || price <= 0){ toast('Product name and price are required', 'error'); return; }
@@ -5193,26 +5313,15 @@ async function submitProductForm(productId){
   if(isNew && !(CURRENT_USER && CURRENT_USER.role === 'admin')){
     toast('Only Admin can create products', 'error'); return;
   }
-  /* Product managers only toggle their own closers; preserve other managers' closer assignments */
-  let assignedCloserIds;
-  if(CURRENT_USER && CURRENT_USER.role === 'productmanager'){
-    const myCloserIds = new Set(closersForManager(CURRENT_USER.id).map(c=>c.id));
-    const prev = (existing && existing.assignedCloserIds) ? existing.assignedCloserIds.slice() : [];
-    const kept = prev.filter(id => !myCloserIds.has(id));
-    const selected = [...myCloserIds].filter(id => document.getElementById('pc_'+id)?.checked);
-    assignedCloserIds = kept.concat(selected);
-  } else {
-    const closers = getAll('closers');
-    assignedCloserIds = closers.filter(c => document.getElementById('pc_'+c.id)?.checked).map(c=>c.id);
-  }
-  let assignedManagerIds = (existing && existing.assignedManagerIds) ? existing.assignedManagerIds.slice() : [];
-  let assignedSeniorManagerIds = (existing && existing.assignedSeniorManagerIds) ? existing.assignedSeniorManagerIds.slice() : [];
-  if(CURRENT_USER && CURRENT_USER.role === 'admin'){
-    assignedManagerIds = productManagers().filter(m => document.getElementById('pm_'+m.id)?.checked).map(m=>m.id);
-    assignedSeniorManagerIds = seniorManagers().filter(sm => document.getElementById('sm_'+sm.id)?.checked).map(sm=>sm.id);
-  }
-  // NOTE: PMs cannot self-assign products. assignedManagerIds for newly created
-  // products is determined by Admin. PMs can only add closer assignments.
+
+  // Admin's direct closer assignment: legacy field-set in the same upsert.
+  // All SM/PM distributions now go through server endpoints, so the
+  // client-side upsert is Admin-only and only writes Admin-controlled fields.
+  const closers = getAll('closers');
+  const assignedCloserIds = closers.filter(c => document.getElementById('pc_'+c.id)?.checked).map(c=>c.id);
+  const assignedManagerIds = productManagers().filter(m => document.getElementById('pm_'+m.id)?.checked).map(m=>m.id);
+  const assignedSeniorManagerIds = seniorManagers().filter(sm => document.getElementById('sm_'+sm.id)?.checked).map(sm=>sm.id);
+
   const record = Object.assign(existing||{}, {
     id: isNew ? uid('prod') : productId,
     name,
@@ -5263,9 +5372,25 @@ async function doDeleteProduct(productId, name){
   toast('Product deleted', 'success');
   renderAll();
 }
-function openProductDetail(productId){
+async function openProductDetail(productId){
   const p = getById('products', productId);
   if(!p) return;
+  // Fetch sanitized server-side product (admin sees zipUrl/zipPassword/zipStoragePath; others do not).
+  // The browser never derives ZIP exposure from the local cache — it trusts the server.
+  let serverP = p;
+  try {
+    if (window.ELAS_API && ELAS_API.getProduct) {
+      const res = await ELAS_API.getProduct(productId);
+      if (res && res.product) serverP = res.product;
+    }
+  } catch (e) {
+    // If the server call fails, fall back to the local read but hide ZIP for non-admin.
+    console.warn('[openProductDetail] server product fetch failed, using local fallback:', e && e.message);
+  }
+  const isAdminUser = CURRENT_USER && CURRENT_USER.role === 'admin';
+  // Defense-in-depth: even if a stale local cache had ZIP, only render it for admin
+  const zipUrlForRender = isAdminUser ? (serverP.zipUrl || p.zipUrl || '') : '';
+  const zipPasswordForRender = isAdminUser ? (serverP.zipPassword || p.zipPassword || '') : '';
   const sales = productSalesForProduct(productId);
   const totalRevenue = sales.reduce((s,x)=>s+(Number(x.salePrice)||0),0);
   const totalCommission = sales.reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
@@ -5284,8 +5409,13 @@ function openProductDetail(productId){
     <div class="detail-section-title">Setup / How-to-Run Video</div>
     ${videoEmbedHTML(p.setupVideoUrl, 'Setup Video')}
     <div class="detail-section-title">ZIP File &amp; Password (Admin Only)</div>
-    <div class="detail-row"><span>ZIP URL</span><span>${p.zipUrl?`<a href="${escapeHtml(p.zipUrl)}" target="_blank" rel="noopener" style="color:var(--accent-2)">Open Link ↗</a>`:'—'}</span></div>
-    <div class="detail-row"><span>Access Password</span><span>${p.zipPassword ? `<code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:6px;">${escapeHtml(p.zipPassword)}</code>` : '<span class="cell-dim">No password</span>'}</span></div>
+    ${isAdminUser ? `
+      <div class="detail-row"><span>ZIP URL</span><span>${zipUrlForRender?`<a href="${escapeHtml(zipUrlForRender)}" target="_blank" rel="noopener" style="color:var(--accent-2)">Open Link ↗</a>`:'—'}</span></div>
+      <div class="detail-row"><span>Access Password</span><span>${zipPasswordForRender ? `<code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:6px;">${escapeHtml(zipPasswordForRender)}</code>` : '<span class="cell-dim">No password</span>'}</span></div>
+    ` : `
+      <div class="detail-row"><span>ZIP URL</span><span class="cell-dim">Restricted — Admin only</span></div>
+      <div class="detail-row"><span>Access Password</span><span class="cell-dim">Restricted — Admin only</span></div>
+    `}
     <div class="detail-section-title">Assigned Closers (${assignedClosers.length})</div>
     ${assignedClosers.length ? assignedClosers.map(c=>`<div class="detail-row"><span>${escapeHtml(c.name)}</span><span class="role-pill role-closer">Closer</span></div>`).join('') : '<p style="font-size:12.5px;color:var(--text-faint);">No closers assigned yet.</p>'}
     <div class="detail-section-title">Sales History</div>
@@ -5299,8 +5429,10 @@ function openProductDetail(productId){
         <td>${s.zipReleased?'<span class="status-pill status-active">Released</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
         <td class="cell-dim">${fmtDate(s.createdDate)}</td>
         <td>
-          <button class="btn btn-ghost btn-sm" onclick="toggleProductCommission('${s.id}')">${s.commissionPaid?'Unpay':'Mark Paid'}</button>
-          ${!s.zipReleased?`<button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="releaseZip('${s.id}')">Release ZIP</button>`:''}
+          ${isAdminUser ? `
+            <button class="btn btn-ghost btn-sm" onclick="toggleProductCommission('${s.id}')">${s.commissionPaid?'Unpay':'Mark Paid'}</button>
+            ${!s.zipReleased?`<button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="releaseZip('${s.id}')">Release ZIP</button>`:''}
+          ` : ''}
         </td>
       </tr>`).join('')}
     </tbody></table></div>` : emptyState('$','No sales yet','Record a sale below.')}
@@ -6001,7 +6133,10 @@ async function loadUsersList(){
       saveLocalCache();
       // Refresh the views that depend on this
       if (typeof renderUsersHierarchy === 'function') renderUsersHierarchy();
-      renderUsersTable();
+      if (typeof renderUsersTable === 'function') renderUsersTable();
+      // Re-render the current view so the just-loaded users are visible
+      // (e.g. SM dashboard "Assigned Product Managers", PM dashboard "My Closers").
+      if (typeof renderAll === 'function' && CURRENT_USER) renderAll();
     }
   } catch (e) {
     console.warn('[loadUsersList]', e.message);
