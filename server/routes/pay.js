@@ -555,8 +555,11 @@ router.post('/sale', async (req, res, next) => {
 
       const apiBase = process.env.API_BASE_URL || `https://elas-api.onrender.com`;
       const callbackUrl = process.env.PAYU_CALLBACK_URL || `${apiBase}/webhook/payu`;
-      const successUrl = process.env.PAYU_SUCCESS_URL || `https://getelasos.com/thanks/?saleId=${encodeURIComponent(inputSaleId)}`;
-      const failureUrl = process.env.PAYU_FAILURE_URL || `${apiBase}/pay/?saleId=${encodeURIComponent(inputSaleId)}`;
+      // PayU POSTs the browser to surl. The frontend /thanks/ is static HTML
+      // and only supports GET, so we point surl at our server-side redirect
+      // endpoint which 302-redirects the browser to the Vercel /thanks/ page.
+      const successUrl = process.env.PAYU_SUCCESS_URL || `${apiBase}/pay/payu-success`;
+      const failureUrl = process.env.PAYU_FAILURE_URL || `${apiBase}/pay/payu-success`;
 
       const session = await payu.createSession({
         amount,
@@ -700,8 +703,10 @@ router.post('/sale', async (req, res, next) => {
 
     const apiBase = process.env.API_BASE_URL || `https://elas-api.onrender.com`;
     const callbackUrl = process.env.PAYU_CALLBACK_URL || `${apiBase}/webhook/payu`;
-    const successUrl = process.env.PAYU_SUCCESS_URL || `https://getelasos.com/thanks/?saleId=${encodeURIComponent(saleId)}`;
-    const failureUrl = process.env.PAYU_FAILURE_URL || 'https://getelasos.com/pay/';
+    // Same fix: use the server-side redirect endpoint for surl/furl so PayU
+    // can POST the browser successfully.
+    const successUrl = process.env.PAYU_SUCCESS_URL || `${apiBase}/pay/payu-success`;
+    const failureUrl = process.env.PAYU_FAILURE_URL || `${apiBase}/pay/payu-success`;
 
     const session = await payu.createSession({
       amount, currency: 'INR',
@@ -978,6 +983,80 @@ router.get('/delivery/:token', async (req, res, next) => {
 
   } catch (err) {
     next(err);
+  }
+});
+
+// ============================================================
+// GET /pay/payu-success
+// PayU browser-success redirect endpoint (surl/furl target).
+//
+// PayU POSTs the customer's browser to surl with the full transaction
+// result as form data. We parse it, extract saleId/txnid, then
+// redirect the browser to the frontend /thanks/ page.
+//
+// The /thanks/ page calls /pay/verify to confirm payment server-side.
+// We deliberately do NOT mark the sale verified here — that is the
+// exclusive job of /pay/verify (idempotent, protected by commission
+// locks and webhook-side-effect idempotency).
+//
+// Why not POST to /thanks/? PayU's surl parameter does an HTML-form
+// auto-submit (browser POST), and the frontend /thanks/ is a static
+// HTML file served by Vercel — it only supports GET. Redirecting from
+// a server-side POST endpoint avoids the HTTP 405.
+// ============================================================
+router.all('/payu-success', (req, res) => {
+  // PayU sends the customer's browser here as a form POST (surl/furl).
+  // We extract saleId/txnid/status from the POST body (parsed by
+  // express.urlencoded() middleware in index.js), then 302-redirect
+  // the browser to the Vercel frontend /thanks/ page.
+  //
+  // We deliberately do NOT mark the sale verified here. That is the
+  // exclusive job of /pay/verify, which is called by /thanks/ after
+  // the redirect. The server-to-server webhook (/webhook/payu) already
+  // marks the sale verified idempotently via commission_locks.
+  //
+  // Priority: POST body > query params (fallback for edge cases).
+
+  let saleId = null;
+  let txnid = null;
+  let status = null;
+  let errorMessage = null;
+
+  if (req.method === 'POST' && req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    // express.urlencoded() parsed this into a plain object
+    saleId = req.body.udf1 || req.body.saleId || null;
+    txnid = req.body.txnid || null;
+    status = req.body.status || null;
+    errorMessage = req.body.error_Message || req.body.error || null;
+  } else {
+    // Fallback: query params (e.g. GET after a redirect chain)
+    saleId = req.query.udf1 || req.query.saleId || null;
+    txnid = req.query.txnid || null;
+    status = req.query.status || null;
+    errorMessage = req.query.error_Message || req.query.error || null;
+  }
+
+  if (!saleId) {
+    console.warn('[payu-success] No saleId in callback — redirecting to home');
+    return res.redirect(302, 'https://getelasos.vercel.app/');
+  }
+
+  const frontendBase = process.env.FRONTEND_URL || 'https://getelasos.vercel.app';
+
+  if (status === 'success') {
+    // Redirect browser to /thanks/ with identifiers. The /thanks/ page
+    // will call /pay/verify to confirm payment before issuing delivery.
+    const params = new URLSearchParams();
+    params.set('saleId', saleId);
+    if (txnid) params.set('txnid', txnid);
+    return res.redirect(302, `${frontendBase}/thanks/?${params.toString()}`);
+  } else {
+    // Failed or pending — send back to /pay/ to retry.
+    const params = new URLSearchParams();
+    params.set('saleId', saleId);
+    if (txnid) params.set('txnid', txnid);
+    if (errorMessage) params.set('payuError', errorMessage);
+    return res.redirect(302, `${frontendBase}/pay/?${params.toString()}`);
   }
 });
 
