@@ -905,7 +905,14 @@ try{
             // User in Firebase Auth but no Firestore profile — possible after migration
             // Fall back to custom token claims
             if (firebaseUser.uid) {
-              const idTokenClaims = firebaseUser.getIdTokenResult ? (await firebaseUser.getIdTokenResult()).claims : {};
+              let idTokenClaims = {};
+          try {
+            if (firebaseUser.getIdTokenResult) {
+              idTokenClaims = (await firebaseUser.getIdTokenResult()).claims || {};
+            }
+          } catch (e) {
+            console.warn('[Auth] Failed to get ID token claims:', e.message);
+          }
               CURRENT_USER = {
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || firebaseUser.email || 'User',
@@ -921,7 +928,14 @@ try{
         } catch (err) {
           console.warn('[Auth] Could not load user profile, using token claims:', err.message);
           // Load minimal profile from token claims as fallback
-          const idTokenClaims = firebaseUser.getIdTokenResult ? (await firebaseUser.getIdTokenResult()).claims : {};
+          let idTokenClaims = {};
+          try {
+            if (firebaseUser.getIdTokenResult) {
+              idTokenClaims = (await firebaseUser.getIdTokenResult()).claims || {};
+            }
+          } catch (e) {
+            console.warn('[Auth] Failed to get ID token claims:', e.message);
+          }
           CURRENT_USER = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || firebaseUser.email || 'User',
