@@ -4140,12 +4140,11 @@ async function renderPaymentLinksView(){
   root.innerHTML = `
     <div class="panel glass">
       <div class="panel-head">
-        <div class="panel-title">Payment Links</div>
+        <div class="panel-title">Create Sale</div>
       </div>
       <p style="font-size:12.5px;color:var(--text-dim);margin:-4px 0 14px;">
-        Create a payment link for your customer. Once the customer completes payment, your commission
-        is attributed automatically. You (your PM and your SM) are derived from your account on the
-        server — they cannot be changed.
+        Enter customer and product details to create a sale. The sale will be pending payment verification.
+        Your commission will be generated once an admin verifies the payment.
       </p>
 
       <div class="panel" style="background:rgba(255,255,255,0.02);">
@@ -4173,8 +4172,8 @@ async function renderPaymentLinksView(){
         </div>
         <div class="field-err" id="plError" style="display:none;margin-top:10px;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
-          <button class="btn btn-primary" id="plCreateBtn" onclick="handleCreatePaymentLink()">
-            Generate Payment Link
+          <button class="btn btn-primary" id="plCreateBtn" onclick="handleCreateSale()">
+            Create Sale
           </button>
           <button class="btn btn-ghost" onclick="renderPaymentLinksView()">Reset</button>
         </div>
@@ -4185,10 +4184,10 @@ async function renderPaymentLinksView(){
       <div style="margin-top:24px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:var(--text-faint);line-height:1.6;">
         <strong style="color:var(--text-dim);">How it works:</strong>
         <ol style="margin:6px 0 0 18px;padding:0;">
-          <li>You create a payment link with the product and customer details.</li>
+          <li>You create a sale with the product and customer details.</li>
           <li>The server creates a pending sale with your attribution locked in (you → your PM → your SM).</li>
-          <li>You share the link with your customer (WhatsApp, email, SMS).</li>
-          <li>Customer pays through PayU. Once verified, your commission is credited automatically.</li>
+          <li>An admin verifies the payment (outside the system) and triggers commission generation.</li>
+          <li>Once verified, your commission is credited automatically.</li>
         </ol>
       </div>
     </div>
@@ -4223,7 +4222,7 @@ async function loadProductsForPaymentLink(){
   }
 }
 
-async function handleCreatePaymentLink(){
+async function handleCreateSale(){
   const productId = (document.getElementById('pl_product') || {}).value;
   const name = ((document.getElementById('pl_custName') || {}).value || '').trim();
   const email = ((document.getElementById('pl_custEmail') || {}).value || '').trim();
@@ -4253,7 +4252,7 @@ async function handleCreatePaymentLink(){
     return;
   }
 
-  if (!window.ELAS_API || !window.ELAS_API.prepareSale) {
+  if (!window.ELAS_API || !window.ELAS_API.createSale) {
     if (err) {
       err.textContent = 'Connection required. Please reload when online.';
       err.style.display = 'block';
@@ -4261,16 +4260,22 @@ async function handleCreatePaymentLink(){
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
 
   try {
-    const data = await window.ELAS_API.prepareSale({
+    const closerCode = window.CURRENT_USER?.loginId || '';
+    if (!closerCode) {
+      throw new Error('Unable to determine your Closer code. Please log in again.');
+    }
+
+    const data = await window.ELAS_API.createSale({
+      closerCode,
       productId,
       customer: { name, email, phone, company }
     });
 
-    if (!data || !data.success || !data.saleId || !data.paymentUrl) {
-      throw new Error((data && data.error) || 'Failed to create payment link');
+    if (!data || !data.success || !data.saleId) {
+      throw new Error((data && data.error) || 'Failed to create sale');
     }
 
     // Show success result
@@ -4278,42 +4283,32 @@ async function handleCreatePaymentLink(){
       result.innerHTML = `
         <div class="panel" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.25);">
           <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--green);">
-            ✓ Payment Link Generated
+            ✓ Sale Created Successfully
           </div>
-          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:6px;">
+          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">
             Sale ID: <strong style="color:var(--accent);font-family:monospace;letter-spacing:1px;">${escapeHtml(data.saleId)}</strong>
           </div>
-          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">
-            Product: <strong>${escapeHtml(data.productName||'')}</strong> — ${fmtMoneyINR(data.amount||0)}
-          </div>
-          <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">
-            Share this link with your customer:
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" readonly value="${escapeHtml(data.paymentUrl)}"
-              id="plUrlInput"
-              style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:var(--text);font-size:12px;font-family:monospace;"
-              onclick="this.select()">
-            <button class="btn btn-primary btn-sm" onclick="copyPaymentUrl()">Copy</button>
-          </div>
-          <div id="plCopyConfirm" style="font-size:11.5px;color:var(--green);margin-top:8px;display:none;">
-            ✓ Copied to clipboard
+          <div style="font-size:12.5px;color:var(--text-dim);">
+            The sale is pending payment verification. Share the Sale ID with your admin for verification.
           </div>
         </div>
       `;
       result.style.display = 'block';
     }
 
-    toast('Payment link created', 'success');
+    toast('Sale created successfully', 'success');
   } catch (e) {
-    console.error('[handleCreatePaymentLink]', e);
+    console.error('[handleCreateSale]', e);
     if (err) {
-      err.textContent = e.message || 'Failed to create payment link. Please try again.';
+      err.textContent = e.message || 'Failed to create sale. Please try again.';
       err.style.display = 'block';
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Generate Payment Link'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Sale'; }
   }
+
+async function handleCreatePaymentLink(){
+  await handleCreateSale();
 }
 
 function copyPaymentUrl(){
@@ -5533,60 +5528,146 @@ async function releaseZip(saleId){
 }
 
 /* ---------- 31b. ADMIN — PRODUCT SALES VIEW ---------------------- */
-function renderProductSalesView(){
-  const sales = getAll('productSales').slice().sort((a,b)=>new Date(b.createdDate)-new Date(a.createdDate));
-  const totalRevenue = sales.reduce((s,x)=>s+(Number(x.salePrice)||0),0);
-  const totalCommission = sales.reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
-  const paidCommission = sales.filter(x=>x.commissionPaid).reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
-  document.getElementById('view-productsales').innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(totalRevenue)}</div><div class="stat-label">Total Product Revenue</div></div>
-      <div class="stat-card glass"><div class="ic-badge bg-amber">⊙</div><div class="stat-val">${fmtMoney(totalCommission)}</div><div class="stat-label">Total Closer Commission</div></div>
-      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(paidCommission)}</div><div class="stat-label">Commission Paid</div></div>
-      <div class="stat-card glass"><div class="ic-badge bg-red">!</div><div class="stat-val">${fmtMoney(totalCommission-paidCommission)}</div><div class="stat-label">Commission Pending</div></div>
-    </div>
-    <div class="panel glass">
-      <div class="panel-head"><div class="panel-title">All Product Sales</div></div>
-      ${sales.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
-        <th>Product</th><th>Client</th><th>Closer</th><th>Sale Price</th><th>Commission (20%)</th><th>Commission Status</th><th>ZIP Released</th><th>Date</th><th></th>
-      </tr></thead><tbody>
-        ${sales.map(s=>`<tr>
-          <td class="cell-strong">${escapeHtml(s.productName||getById('products',s.productId)?.name||'—')}</td>
-          <td>${escapeHtml(s.clientName||'—')}</td>
-          <td>${escapeHtml(getById('closers',s.closerId)?.name||'—')}</td>
-          <td>${fmtMoney(s.salePrice)}</td>
-          <td>${fmtMoney(s.closerCommission)}</td>
-          <td>${s.commissionPaid?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
-          <td>${s.zipReleased?'<span class="status-pill status-active">Released</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
-          <td class="cell-dim">${fmtDate(s.createdDate)}</td>
-          <td><div class="row-actions">
-            <button class="btn btn-ghost btn-sm" onclick="toggleProductCommission('${s.id}')">${s.commissionPaid?'Unpay':'Pay'}</button>
-            ${!s.zipReleased?`<button class="btn btn-ghost btn-sm" onclick="releaseZip('${s.id}')">Release ZIP</button>`:''}
-          </div></td>
-        </tr>`).join('')}
-      </tbody></table></div>` : emptyState('⊙','No product sales yet','Record a sale from the Products page.')}
-    </div>
-    <div class="panel glass">
-      <div class="panel-head"><div class="panel-title">Commission by Closer</div></div>
-      <div class="table-wrap"><table class="data-table"><thead><tr>
-        <th>Closer</th><th>Product Sales</th><th>Total Commission</th><th>Paid</th><th>Pending</th>
-      </tr></thead><tbody>
-        ${getAll('closers').map(c=>{
-          const earned = productTotalCommission(c.id);
-          const paid = productPaidCommission(c.id);
-          const ps = productSalesForCloser(c.id);
-          if(!ps.length) return '';
-          return `<tr>
-            <td class="cell-strong">${escapeHtml(c.name)}</td>
-            <td>${ps.length}</td>
-            <td>${fmtMoney(earned)}</td>
-            <td style="color:var(--green)">${fmtMoney(paid)}</td>
-            <td style="color:${earned-paid>0?'var(--amber)':'var(--text-dim)'}">${fmtMoney(earned-paid)}</td>
-          </tr>`;
-        }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">No closer commission data yet</td></tr>'}
-      </tbody></table></div>
-    </div>
-  `;
+async function renderProductSalesView(){
+  const root = document.getElementById('view-productsales');
+  try {
+    const response = await window.ELAS_API.call('/admin/sales', null, { method: 'GET', auth: true });
+    const sales = response.sales || [];
+    // Compute stats
+    const pendingCount = sales.length;
+    const totalAmount = sales.reduce((sum, s)=> sum + (Number(s.amount)||0), 0);
+    const verifiedCount = sales.filter(s=> s.paymentVerificationStatus === 'verified').length;
+    const failedCount = sales.filter(s=> s.paymentVerificationStatus === 'failed').length;
+    root.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card glass"><div class="ic-badge bg-green">#</div><div class="stat-val">${pendingCount}</div><div class="stat-label">Pending Sales</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-green">$</div><div class="stat-val">${fmtMoney(totalAmount)}</div><div class="stat-label">Total Amount</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${verifiedCount}</div><div class="stat-label">Verified</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-red">!</div><div class="stat-val">${failedCount}</div><div class="stat-label">Failed</div></div>
+      </div>
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">Pending Manual Sales</div></div>
+        ${sales.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+          <th>Sale ID</th><th>Client</th><th>Email</th><th>Phone</th><th>Product</th><th>Amount</th><th>Closer</th><th>PM</th><th>SM</th><th>Date</th><th>Status</th><th></th>
+        </tr></thead><tbody>
+          ${sales.map(s=>`<tr>
+            <td class="cell-strong" style="cursor:pointer;color:var(--accent-2)" onclick="viewSaleDetails('${s.saleId}')">${escapeHtml(s.saleId)}</td>
+            <td>${escapeHtml(s.clientName||'—')}</td>
+            <td>${escapeHtml(s.customerEmail||'—')}</td>
+            <td>${escapeHtml(s.customerPhone||'—')}</td>
+            <td>${escapeHtml(s.productName||'—')}</td>
+            <td>${fmtMoney(s.amount||0)}</td>
+            <td>${escapeHtml(s.closerName||'—')}</td>
+            <td>${escapeHtml(s.productManagerName||'—')}</td>
+            <td>${escapeHtml(s.seniorManagerName||'—')}</td>
+            <td class="cell-dim">${fmtDate(s.createdAt||s.createdDate)}</td>
+            <td><span class="badge ${s.paymentVerificationStatus === 'pending' ? 'bg-amber' : s.paymentVerificationStatus === 'verified' ? 'bg-green' : 'bg-red'}">${s.paymentVerificationStatus}</span></td>
+            <td></td>
+          </tr>`).join('')}
+        </tbody></table></div>` : emptyState('📝','No pending sales','Sales awaiting payment verification will appear here.')}
+      </div>
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">Commission by Closer</div></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr>
+          <th>Closer</th><th>Product Sales</th><th>Total Commission</th><th>Paid</th><th>Pending</th>
+        </tr></thead><tbody>
+          ${getAll('closers').map(c=>{
+            const earned = productTotalCommission(c.id);
+            const paid = productPaidCommission(c.id);
+            const ps = productSalesForCloser(c.id);
+            if(!ps.length) return '';
+            return `<tr>
+              <td class="cell-strong">${escapeHtml(c.name)}</td>
+              <td>${ps.length}</td>
+              <td>${fmtMoney(earned)}</td>
+              <td style="color:var(--green)">${fmtMoney(paid)}</td>
+              <td style="color:${earned-paid>0?'var(--amber)':'var(--text-dim)'}">${fmtMoney(earned-paid)}</td>
+            </tr>`;
+          }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:20px;">No closer commission data yet</td></tr>'}
+        </tbody></table></div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('[renderProductSalesView]', err);
+    root.innerHTML = `
+      <div class="panel glass">
+        <div class="panel-head"><div class="panel-title">Error loading sales</div></div>
+        <p style="color:var(--red);">Failed to load sales data. Please try again later.</p>
+      </div>
+    `;
+  }
+}
+
+async function viewSaleDetails(saleId) {
+  if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
+    toast('Invalid sale ID', 'error');
+    return;
+  }
+  try {
+    const response = await window.ELAS_API.call(`/admin/sales/${encodeURIComponent(saleId)}`, null, { method: 'GET', auth: true });
+    const sale = response.sale || {};
+    if (!sale.saleId) {
+      toast('Sale not found', 'error');
+      return;
+    }
+    // Build full modal HTML
+    const modalHTML = `
+      <div class="modal-head">
+        <div class="modal-title">Sale Details</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="form-grid2">
+        <div class="field"><label>Sale ID</label><span class="stat-val">${escapeHtml(sale.saleId)}</span></div>
+        <div class="field"><label>Client</label><span class="stat-val">${escapeHtml(sale.clientName||'—')}</span></div>
+        <div class="field"><label>Email</label><span class="stat-val">${escapeHtml(sale.customerEmail||'—')}</span></div>
+        <div class="field"><label>Phone</label><span class="stat-val">${escapeHtml(sale.customerPhone||'—')}</span></div>
+        <div class="field"><label>Product</label><span class="stat-val">${escapeHtml(sale.productName||'—')}</span></div>
+        <div class="field"><label>Amount (₹)</label><span class="stat-val">${fmtMoney(sale.amount||0)}</span></div>
+        <div class="field"><label>Closer</label><span class="stat-val">${escapeHtml(sale.closerName||'—')}</span></div>
+        <div class="field"><label>Product Manager</label><span class="stat-val">${escapeHtml(sale.productManagerName||'—')}</span></div>
+        <div class="field"><label>Senior Manager</label><span class="stat-val">${escapeHtml(sale.seniorManagerName||'—')}</span></div>
+        <div class="field"><label>Created Date</label><span class="stat-val">${fmtDate(sale.createdAt||sale.createdDate)}</span></div>
+        <div class="field"><label>Payment Verification Status</label><span class="stat-val badge ${sale.paymentVerificationStatus === 'pending' ? 'bg-amber' : sale.paymentVerificationStatus === 'verified' ? 'bg-green' : 'bg-red'}">${sale.paymentVerificationStatus}</span></div>
+        ${sale.verifiedAt ? `<div class="field"><label>Verified At</label><span class="stat-val">${fmtDate(sale.verifiedAt)}</span></div>` : ''}
+        ${sale.verifiedBy ? `<div class="field"><label>Verified By</label><span class="stat-val">${escapeHtml(sale.verifiedBy)}</span></div>` : ''}
+        ${sale.paymentMethod ? `<div class="field"><label>Payment Method</label><span class="stat-val">${escapeHtml(sale.paymentMethod)}</span></div>` : ''}
+        ${sale.paymentReference ? `<div class="field"><label>Payment Reference</label><span class="stat-val">${escapeHtml(sale.paymentReference)}</span></div>` : ''}
+      </div>
+      <div class="modal-footer">
+        ${sale.paymentVerificationStatus === 'pending' ? `
+          <button class="btn btn-primary" onclick="verifySalePayment('${sale.saleId}')">
+            Verify & Approve Payment
+          </button>
+        ` : ''}
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    `;
+    renderModal(modalHTML);
+  } catch (err) {
+    console.error('[viewSaleDetails]', err);
+    toast('Failed to load sale details', 'error');
+  }
+}
+
+async function verifySalePayment(saleId) {
+  if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
+    toast('Invalid sale ID', 'error');
+    return;
+  }
+  try {
+    const response = await window.ELAS_API.call(`/admin/sales/${encodeURIComponent(saleId)}/verify`, {}, { method: 'POST', auth: true });
+    if (response.success) {
+      toast('Payment verified and commission generated', 'success');
+      closeModal();
+      // Refresh the sales queue
+      renderProductSalesView();
+    } else {
+      throw new Error(response.error || 'Failed to verify payment');
+    }
+  } catch (err) {
+    console.error('[verifySalePayment]', err);
+    toast(err.message || 'Failed to verify payment', 'error');
+  }
 }
 
 /* ---------- 31c. CLOSER — MY PRODUCTS (limited view) ------------- */
