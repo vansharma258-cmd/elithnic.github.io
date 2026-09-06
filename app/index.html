@@ -5729,7 +5729,8 @@ async function viewSaleDetails(saleId) {
 }
 
 async function verifySalePayment(saleId) {
-  if (!saleId || typeof saleId !== 'string' || !/^SALE-\\d+$/.test(saleId)) {
+  saleId = (saleId == null ? '' : String(saleId)).trim();
+  if (!saleId || !/^SALE-\d+$/.test(saleId)) {
     toast('Invalid sale ID', 'error');
     return;
   }

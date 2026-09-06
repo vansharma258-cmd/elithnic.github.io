@@ -1144,11 +1144,13 @@ router.post('/sales/:saleId/verify', requireAuth, async (req, res, next) => {
     }
     const sale = { id: saleSnap.id, ...saleSnap.data() };
     let needsVerification = false;
-    if (sale.paymentVerificationStatus === 'pending') {
+    // Treat missing paymentVerificationStatus + pending status as pending (older prepare-sale records)
+    const pvs = sale.paymentVerificationStatus
+      || ((sale.status === 'pending' || sale.paymentStatus === 'pending') ? 'pending' : sale.paymentVerificationStatus);
+    if (pvs === 'pending') {
       needsVerification = true;
-    } else if (sale.paymentVerificationStatus !== 'verified') {
-      // Other statuses like 'failed' maybe? We'll treat as error.
-      return res.status(400).json({ error: `Sale cannot be verified from status: ${sale.paymentVerificationStatus}` });
+    } else if (pvs !== 'verified') {
+      return res.status(400).json({ error: `Sale cannot be verified from status: ${pvs}` });
     }
     // If pending, run transaction to mark as verified
     if (needsVerification) {
@@ -1158,7 +1160,9 @@ router.post('/sales/:saleId/verify', requireAuth, async (req, res, next) => {
           throw new Error('Sale not found');
         }
         const current = { id: snap.id, ...snap.data() };
-        if (current.paymentVerificationStatus !== 'pending') {
+        const curPvs = current.paymentVerificationStatus
+          || ((current.status === 'pending' || current.paymentStatus === 'pending') ? 'pending' : current.paymentVerificationStatus);
+        if (curPvs !== 'pending') {
           throw new Error('Sale is no longer pending verification');
         }
         const updateData = {
