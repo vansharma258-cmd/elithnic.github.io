@@ -2709,18 +2709,235 @@ function renderProductQuickStats(){
     </tr>`).join('')}
   </tbody></table></div>`;
 }
-function renderAdminDashboard(){
+
+/* ---------- Admin product-sale business analytics (canonical sources) ----------
+   Revenue / verified counts → sales via Admin API (paymentVerificationStatus)
+   Commissions → commissionLedger (server-generated, idempotent)
+   Hierarchy → sale attribution fields (closerId, productManagerId, seniorManagerId)
+   --------------------------------------------------------------------------- */
+function adminSaleIsVerified(s){
+  return (s.paymentVerificationStatus === 'verified')
+    || (s.paymentStatus === 'verified')
+    || (s.status === 'verified');
+}
+function adminSaleIsPending(s){
+  if (adminSaleIsVerified(s)) return false;
+  const pvs = s.paymentVerificationStatus || s.paymentStatus || s.status || 'pending';
+  return pvs === 'pending';
+}
+function sumField(rows, key){
+  return rows.reduce((t, r) => t + (Number(r[key]) || 0), 0);
+}
+function computeAdminBusinessAnalytics(pendingSales, verifiedSales, ledger){
+  pendingSales = pendingSales || [];
+  verifiedSales = verifiedSales || [];
+  ledger = ledger || getAll('commissionLedger') || [];
+
+  const verifiedRevenue = sumField(verifiedSales, 'amount');
+  const pendingRevenue = sumField(pendingSales, 'amount');
+  const closerComm = sumField(ledger, 'closerAmount');
+  const pmComm = sumField(ledger, 'productManagerAmount');
+  const smComm = sumField(ledger, 'seniorManagerAmount');
+  const totalComm = closerComm + pmComm + smComm;
+  // Product-sale contribution margin = verified revenue − commissions from ledger.
+  // Project agency profit remains separate (dashboardStats.totalProfit).
+  const productSaleNet = verifiedRevenue - totalComm;
+
+  const productIds = new Set(verifiedSales.map(s => s.productId).filter(Boolean));
+  const clientIds = new Set();
+  verifiedSales.forEach(s => {
+    if (s.clientId) clientIds.add(s.clientId);
+    else if (s.clientEmail || s.customerEmail) clientIds.add(String(s.clientEmail || s.customerEmail).toLowerCase());
+  });
+  pendingSales.forEach(s => {
+    if (s.clientId) clientIds.add(s.clientId);
+    else if (s.clientEmail || s.customerEmail) clientIds.add(String(s.clientEmail || s.customerEmail).toLowerCase());
+  });
+
+  const avgSale = verifiedSales.length ? (verifiedRevenue / verifiedSales.length) : 0;
+
+  // Hierarchy performance from verified sales + ledger amounts
+  function buildHierarchy(rows, idKey, amountFromLedger){
+    const map = {};
+    rows.forEach(s => {
+      const id = s[idKey];
+      if (!id) return;
+      if (!map[id]) {
+        map[id] = {
+          id,
+          name: s[idKey.replace('Id','Name')] || s[idKey.replace('ManagerId','ManagerName')] || null,
+          sales: 0,
+          verified: 0,
+          revenue: 0,
+          commission: 0,
+        };
+      }
+      map[id].sales += 1;
+      map[id].verified += 1;
+      map[id].revenue += Number(s.amount) || 0;
+    });
+    // names from users/closers if missing
+    Object.keys(map).forEach(id => {
+      if (!map[id].name) {
+        if (idKey === 'closerId') {
+          const c = getById('closers', id);
+          map[id].name = c ? c.name : id;
+        } else {
+          const u = getAll('users').find(x => x.id === id);
+          map[id].name = u ? u.name : id;
+        }
+      }
+      map[id].commission = amountFromLedger(id);
+    });
+    return Object.values(map).sort((a,b) => b.revenue - a.revenue);
+  }
+
+  const closerPerf = buildHierarchy(verifiedSales, 'closerId', (id) =>
+    ledger.filter(l => l.closerId === id).reduce((t,l)=>t+(Number(l.closerAmount)||0),0)
+  );
+  // Fix names on closer from sale.closerName
+  verifiedSales.forEach(s => {
+    if (s.closerId && s.closerName) {
+      const row = closerPerf.find(r => r.id === s.closerId);
+      if (row && (!row.name || row.name === s.closerId)) row.name = s.closerName;
+    }
+  });
+  const pmPerf = buildHierarchy(verifiedSales, 'productManagerId', (id) =>
+    ledger.filter(l => l.productManagerId === id).reduce((t,l)=>t+(Number(l.productManagerAmount)||0),0)
+  );
+  verifiedSales.forEach(s => {
+    if (s.productManagerId && s.productManagerName) {
+      const row = pmPerf.find(r => r.id === s.productManagerId);
+      if (row && (!row.name || row.name === s.productManagerId)) row.name = s.productManagerName;
+    }
+  });
+  const smPerf = buildHierarchy(verifiedSales, 'seniorManagerId', (id) =>
+    ledger.filter(l => l.seniorManagerId === id).reduce((t,l)=>t+(Number(l.seniorManagerAmount)||0),0)
+  );
+  verifiedSales.forEach(s => {
+    if (s.seniorManagerId && s.seniorManagerName) {
+      const row = smPerf.find(r => r.id === s.seniorManagerId);
+      if (row && (!row.name || row.name === s.seniorManagerId)) row.name = s.seniorManagerName;
+    }
+  });
+
+  // Product performance
+  const productMap = {};
+  getAll('products').forEach(p => {
+    productMap[p.id] = {
+      id: p.id,
+      name: p.name,
+      assignedClosers: (p.assignedCloserIds || []).length,
+      totalSales: 0,
+      verifiedSales: 0,
+      pendingSales: 0,
+      revenue: 0,
+    };
+  });
+  verifiedSales.forEach(s => {
+    const id = s.productId || '_unknown';
+    if (!productMap[id]) {
+      productMap[id] = { id, name: s.productName || id, assignedClosers: 0, totalSales: 0, verifiedSales: 0, pendingSales: 0, revenue: 0 };
+    }
+    productMap[id].totalSales += 1;
+    productMap[id].verifiedSales += 1;
+    productMap[id].revenue += Number(s.amount) || 0;
+    if (s.productName) productMap[id].name = s.productName;
+  });
+  pendingSales.forEach(s => {
+    const id = s.productId || '_unknown';
+    if (!productMap[id]) {
+      productMap[id] = { id, name: s.productName || id, assignedClosers: 0, totalSales: 0, verifiedSales: 0, pendingSales: 0, revenue: 0 };
+    }
+    productMap[id].totalSales += 1;
+    productMap[id].pendingSales += 1;
+    if (s.productName) productMap[id].name = s.productName;
+  });
+  const productPerf = Object.values(productMap).sort((a,b) => b.revenue - a.revenue);
+
+  const topCloser = closerPerf[0] || null;
+  const topPM = pmPerf[0] || null;
+  const topSM = smPerf[0] || null;
+  const topProduct = productPerf.find(p => p.verifiedSales > 0) || productPerf[0] || null;
+
+  return {
+    pendingCount: pendingSales.length,
+    verifiedCount: verifiedSales.length,
+    totalSalesCount: pendingSales.length + verifiedSales.length,
+    verifiedRevenue,
+    pendingRevenue,
+    closerComm,
+    pmComm,
+    smComm,
+    totalComm,
+    productSaleNet,
+    avgSale,
+    uniqueProductsSold: productIds.size,
+    uniqueClients: clientIds.size,
+    closerPerf,
+    pmPerf,
+    smPerf,
+    productPerf,
+    topCloser,
+    topPM,
+    topSM,
+    topProduct,
+    ledgerCount: ledger.length,
+  };
+}
+
+function hierarchyPerfTable(rows, idLabel){
+  if (!rows || !rows.length) {
+    return `<p style="font-size:12.5px;color:var(--text-faint);margin:0;">No verified product sales attributed yet.</p>`;
+  }
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Name</th><th>${idLabel}</th><th>Verified Sales</th><th>Revenue</th><th>Commission</th>
+  </tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td class="cell-strong">${escapeHtml(r.name || '—')}</td>
+      <td class="cell-dim" style="font-family:monospace;font-size:11px;">${escapeHtml(r.id)}</td>
+      <td>${r.verified}</td>
+      <td>${fmtMoney(r.revenue)}</td>
+      <td style="color:var(--green);">${fmtMoney(r.commission)}</td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function productPerfTable(rows){
+  if (!rows || !rows.length) {
+    return emptyState('⊞','No products yet','Add products and record sales to see performance here.');
+  }
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Product</th><th>Product ID</th><th>Closers Assigned</th><th>Total Sales</th><th>Verified</th><th>Pending</th><th>Revenue (verified)</th>
+  </tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td class="cell-strong" style="cursor:pointer" onclick="openProductDetail('${escapeHtml(r.id)}')">${escapeHtml(r.name || '—')}</td>
+      <td class="cell-dim" style="font-family:monospace;font-size:11px;">${escapeHtml(r.id)}</td>
+      <td>${r.assignedClosers}</td>
+      <td>${r.totalSales}</td>
+      <td>${r.verifiedSales}</td>
+      <td>${r.pendingSales}</td>
+      <td>${fmtMoney(r.revenue)}</td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+
+async function renderAdminDashboard(){
+  const root = document.getElementById('view-dashboard');
+  if (!root) return;
   const s = dashboardStats();
   const leads = getAll('leads').slice().sort((a,b)=> new Date(b.createdDate)-new Date(a.createdDate)).slice(0,5);
   const upcoming = getAll('projects').filter(p=>p.deadline && p.status!=='Completed')
     .sort((a,b)=> new Date(a.deadline)-new Date(b.deadline)).slice(0,5);
   const activities = getAll('activities').slice(0,6);
 
+  // Existing operational cards (projects / team) — preserved
   const statCards = [
     {label:'Total Leads', val:s.totalLeads, ic:'◎', bg:'bg-blue'},
     {label:'Active Projects', val:s.activeProjects, ic:'▣', bg:'bg-violet'},
-    {label:'Total Revenue', val:fmtMoney(s.totalRevenue), ic:'$', bg:'bg-green'},
-    {label:'Total Profit', val:fmtMoney(s.totalProfit), ic:'▲', bg:'bg-green'},
+    {label:'Project Revenue', val:fmtMoney(s.totalRevenue), ic:'$', bg:'bg-green'},
+    {label:'Project Profit', val:fmtMoney(s.totalProfit), ic:'▲', bg:'bg-green'},
     {label:'Closers', val:s.totalClosers, ic:'◈', bg:'bg-violet'},
     {label:'Delivery Partners', val:s.totalDP, ic:'◇', bg:'bg-blue'},
     {label:'Freelancers', val:s.totalFreelancers, ic:'✦', bg:'bg-amber'},
@@ -2729,7 +2946,7 @@ function renderAdminDashboard(){
     {label:'Completed Projects', val:s.completedProjects, ic:'✓', bg:'bg-green'}
   ];
 
-  document.getElementById('view-dashboard').innerHTML = `
+  root.innerHTML = `
     <div class="panel glass" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
       <div>
         <div class="panel-title" style="margin-bottom:2px;">Quick DSA Entry</div>
@@ -2750,16 +2967,12 @@ function renderAdminDashboard(){
           <div class="stat-label">${c.label}</div>
         </div>`).join('')}
     </div>
-    <div class="dash-grid2">
-      <div class="panel glass">
-        <div class="panel-head">
-          <div class="panel-title">Product Performance — Quick Stats</div>
-          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('products')">View All Products</button></div>
-        </div>
-        ${renderProductQuickStats()}
+    <div id="adminBizAnalytics">
+      <div class="panel glass" style="margin-top:18px;"><div class="panel-head"><div class="panel-title">Product Sales Analytics</div></div>
+        <p style="font-size:12.5px;color:var(--text-faint);">Loading verified sales &amp; commission ledger…</p>
       </div>
     </div>
-    <div class="dash-grid2">
+    <div class="dash-grid2" style="margin-top:18px;">
       <div class="panel glass">
         <div class="panel-head">
           <div class="panel-title">Recent Leads</div>
@@ -2767,28 +2980,20 @@ function renderAdminDashboard(){
         </div>
         ${leads.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Budget</th><th>Score</th><th>Status</th></tr></thead><tbody>
           ${leads.map(l=>`<tr><td class="cell-strong">${escapeHtml(l.clientName)}</td><td>${escapeHtml(l.service||'—')}</td><td>${fmtMoney(l.budget)}</td><td>${leadScoreBadgeHTML(l)}</td><td><span class="badge ${badgeClassFor(l.status)}">${l.status}</span></td></tr>`).join('')}
-        </tbody></table></div>` : emptyState('◎','No leads yet','New leads you add will show up here.')}
+        </tbody></table></div>` : emptyState('◎','No leads yet','New leads will appear here.')}
       </div>
       <div class="panel glass">
         <div class="panel-head"><div class="panel-title">Upcoming Deadlines</div></div>
-        ${upcoming.length ? upcoming.map(p=>{
-          const days = daysBetween(todayISO(), p.deadline);
-          const urgent = days <= 2;
-          return `<div class="detail-row"><span>${escapeHtml(p.clientName)} <span class="cell-dim">(${p.trackingId})</span></span><span style="color:${urgent?'var(--red)':'var(--text)'}">${fmtDate(p.deadline)}</span></div>`;
-        }).join('') : emptyState('⏱','No deadlines','Project deadlines will appear here.')}
+        ${upcoming.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Deadline</th><th>Status</th></tr></thead><tbody>
+          ${upcoming.map(p=>`<tr><td class="cell-strong">${escapeHtml(p.clientName||'—')}</td><td>${fmtDate(p.deadline)}</td><td><span class="badge ${badgeClassFor(p.status)}">${p.status}</span></td></tr>`).join('')}
+        </tbody></table></div>` : emptyState('⏱','No upcoming deadlines','Project deadlines will show here.')}
       </div>
     </div>
-    <div class="dash-grid2">
+    <div class="dash-grid2" style="margin-top:18px;">
       <div class="panel glass">
-        <div class="panel-head"><div class="panel-title">Today's Follow-ups</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('leads')">View All Leads</button></div></div>
-        ${renderFollowUpWidget()}
+        <div class="panel-head"><div class="panel-title">Recent Activity</div></div>
+        ${activities.length ? activities.map(a=>`<div class="detail-row"><span>${escapeHtml(a.message||a.type||'—')}</span><span class="cell-dim">${fmtDate(a.timestamp)}</span></div>`).join('') : emptyState('◌','No activity yet','System activity will appear here.')}
       </div>
-      <div class="panel glass">
-        <div class="panel-head"><div class="panel-title">Recent Activity</div><div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('activity')">View All</button></div></div>
-        ${activities.length ? activities.map(a=>activityItemHTML(a)).join('') : emptyState('≡','No activity yet','Actions across the platform will be logged here.')}
-      </div>
-    </div>
-    <div class="dash-grid2">
       <div class="panel glass">
         <div class="panel-head"><div class="panel-title">Lead Pipeline Snapshot</div></div>
         ${pipelineSnapshotHTML()}
@@ -2796,7 +3001,108 @@ function renderAdminDashboard(){
     </div>
   `;
   renderNavBadges();
+
+  // Async: product-sale financials from Admin sales API + local commissionLedger
+  try {
+    let pendingSales = [];
+    let verifiedSales = [];
+    if (window.ELAS_API) {
+      const [pr, vr] = await Promise.all([
+        window.ELAS_API.call('/admin/sales?status=pending', null, { method: 'GET', auth: true }),
+        window.ELAS_API.call('/admin/sales?status=verified', null, { method: 'GET', auth: true }),
+      ]);
+      pendingSales = (pr && pr.sales) || [];
+      verifiedSales = (vr && vr.sales) || [];
+    }
+    const ledger = getAll('commissionLedger') || [];
+    const a = computeAdminBusinessAnalytics(pendingSales, verifiedSales, ledger);
+    const host = document.getElementById('adminBizAnalytics');
+    if (!host) return;
+
+    const profitNote = a.verifiedCount
+      ? `Product-sale net (verified revenue − ledger commissions): <strong style="color:var(--green)">${fmtMoney(a.productSaleNet)}</strong>. Project profit above is from delivery projects only.`
+      : 'No verified product sales yet — product-sale net unavailable.';
+
+    host.innerHTML = `
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head">
+          <div class="panel-title">Product Sales — Financial Overview</div>
+          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="renderAdminDashboard()">↻ Refresh</button></div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:-4px 0 14px;">
+          Figures below use <strong>verified</strong> sales only for revenue, and the server <strong>commission ledger</strong> for commissions. Pending sales are excluded from revenue.
+        </p>
+        <div class="stat-grid">
+          <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(a.verifiedRevenue)}</div><div class="stat-label">Verified Revenue</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-amber">⏳</div><div class="stat-val">${fmtMoney(a.pendingRevenue)}</div><div class="stat-label">Pending (not revenue)</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${a.verifiedCount}</div><div class="stat-label">Verified Sales</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${a.pendingCount}</div><div class="stat-label">Pending Sales</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-violet">⊙</div><div class="stat-val">${a.totalSalesCount}</div><div class="stat-label">Total Sales</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-blue">◎</div><div class="stat-val">${a.uniqueClients}</div><div class="stat-label">Clients (sales)</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-violet">⊞</div><div class="stat-val">${a.uniqueProductsSold}</div><div class="stat-label">Products Sold</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(a.avgSale)}</div><div class="stat-label">Avg Verified Sale</div></div>
+        </div>
+      </div>
+
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head"><div class="panel-title">Commission Overview (Ledger)</div>
+          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('productsales')">Sales Queue</button></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(a.closerComm)}</div><div class="stat-label">Closer Commissions</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(a.pmComm)}</div><div class="stat-label">PM Commissions</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(a.smComm)}</div><div class="stat-label">SM Commissions</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-violet">₹</div><div class="stat-val">${fmtMoney(a.totalComm)}</div><div class="stat-label">Total Commission</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-amber">₹</div><div class="stat-val">${fmtMoney(0)}</div><div class="stat-label">Admin Commission</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-blue">#</div><div class="stat-val">${a.ledgerCount}</div><div class="stat-label">Ledger Entries</div></div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-dim);margin-top:12px;line-height:1.55;">${profitNote}</p>
+      </div>
+
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head"><div class="panel-title">Top Performers (Verified Revenue)</div></div>
+        <div class="stat-grid">
+          <div class="stat-card glass"><div class="ic-badge bg-green">◎</div><div class="stat-val" style="font-size:15px;">${escapeHtml((a.topCloser && a.topCloser.name) || '—')}</div><div class="stat-label">Top Closer · ${a.topCloser ? fmtMoney(a.topCloser.revenue) : '₹0'}</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-violet">◈</div><div class="stat-val" style="font-size:15px;">${escapeHtml((a.topPM && a.topPM.name) || '—')}</div><div class="stat-label">Top PM · ${a.topPM ? fmtMoney(a.topPM.revenue) : '₹0'}</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-blue">◇</div><div class="stat-val" style="font-size:15px;">${escapeHtml((a.topSM && a.topSM.name) || '—')}</div><div class="stat-label">Top SM · ${a.topSM ? fmtMoney(a.topSM.revenue) : '₹0'}</div></div>
+          <div class="stat-card glass"><div class="ic-badge bg-amber">⊞</div><div class="stat-val" style="font-size:15px;">${escapeHtml((a.topProduct && a.topProduct.name) || '—')}</div><div class="stat-label">Top Product · ${a.topProduct ? fmtMoney(a.topProduct.revenue) : '₹0'}</div></div>
+        </div>
+      </div>
+
+      <div class="dash-grid2" style="margin-top:18px;">
+        <div class="panel glass">
+          <div class="panel-head"><div class="panel-title">Closer Performance</div></div>
+          ${hierarchyPerfTable(a.closerPerf, 'Entity ID')}
+        </div>
+        <div class="panel glass">
+          <div class="panel-head"><div class="panel-title">Product Manager Performance</div></div>
+          ${hierarchyPerfTable(a.pmPerf, 'User ID')}
+        </div>
+      </div>
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head"><div class="panel-title">Senior Manager Performance</div></div>
+        ${hierarchyPerfTable(a.smPerf, 'User ID')}
+      </div>
+
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head">
+          <div class="panel-title">Product Performance</div>
+          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="navigateTo('products')">View All Products</button></div>
+        </div>
+        ${productPerfTable(a.productPerf)}
+      </div>
+    `;
+  } catch (err) {
+    console.error('[renderAdminDashboard] analytics:', err);
+    const host = document.getElementById('adminBizAnalytics');
+    if (host) {
+      host.innerHTML = `<div class="panel glass" style="margin-top:18px;"><div class="panel-head"><div class="panel-title">Product Sales Analytics</div></div>
+        <p style="color:var(--red);font-size:13px;">Could not load sales analytics: ${escapeHtml(err.message || 'error')}</p>
+        <button class="btn btn-ghost btn-sm" onclick="renderAdminDashboard()">Retry</button></div>`;
+    }
+  }
 }
+
 function renderFollowUpWidget(scopedList){
   const today = todayISO();
   const source = scopedList || getAll('leads');
