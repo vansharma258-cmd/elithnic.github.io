@@ -901,10 +901,19 @@ try{
               showScreen('loginScreen');
               toast('This account has been disabled', 'error');
             }
+            CURRENT_USER = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email || 'User',
+              email: firebaseUser.email || '',
+              role: idTokenClaims.role || 'client',
+              entityId: idTokenClaims.entityId || null,
+              loginId: idTokenClaims.loginId || '',
+              status: 'active',
+            };
           } else {
             // User in Firebase Auth but no Firestore profile — possible after migration
             // Fall back to custom token claims
-            if (firebaseUser.uid) {
+            if (firebaseUser.uid && firebaseUser.uid.trim() !== '') {
               let idTokenClaims = {};
           try {
             if (firebaseUser.getIdTokenResult) {
@@ -923,28 +932,48 @@ try{
                 status: 'active',
               };
               setLoggedIn(firebaseUser.uid, true);
+            } else {
+              // Firebase user without a valid UID — treat as unauthenticated
+              console.warn('[Auth] Firebase user has no UID');
+              if (firebase.auth) {
+                firebase.auth().signOut().catch(err => console.warn('[Auth] Sign out failed:', err.message));
+              }
+              CURRENT_USER = null;
+              clearLoggedIn();
+              showScreen('loginScreen');
+            }
             }
           }
         } catch (err) {
           console.warn('[Auth] Could not load user profile, using token claims:', err.message);
-          // Load minimal profile from token claims as fallback
-          let idTokenClaims = {};
-          try {
-            if (firebaseUser.getIdTokenResult) {
-              idTokenClaims = (await firebaseUser.getIdTokenResult()).claims || {};
+          // Check if firebaseUser is still valid (may have changed during async operation)
+          if (!firebaseUser) {
+            // No Firebase Auth session
+            if (CURRENT_USER) {
+              CURRENT_USER = null;
+              clearLoggedIn();
             }
-          } catch (e) {
-            console.warn('[Auth] Failed to get ID token claims:', e.message);
           }
-          CURRENT_USER = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email || 'User',
-            role: idTokenClaims.role || 'client',
-            entityId: idTokenClaims.entityId || null,
-            loginId: idTokenClaims.loginId || '',
-            status: 'active',
-          };
+          else {
+            // Load minimal profile from token claims as fallback
+            let idTokenClaims = {};
+            try {
+              if (firebaseUser.getIdTokenResult) {
+                idTokenClaims = (await firebaseUser.getIdTokenResult()).claims || {};
+              }
+            }
+            catch (e) {
+              console.warn('[Auth] Failed to get ID token claims:', e.message);
         }
+            CURRENT_USER = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email || 'User',
+              email: firebaseUser.email || '',
+              role: idTokenClaims.role || 'client',
+              entityId: idTokenClaims.entityId || null,
+              loginId: idTokenClaims.loginId || '',
+              status: 'active',
+            };
       } else {
         // No Firebase Auth session
         if (CURRENT_USER) {
@@ -7940,7 +7969,6 @@ async function bootstrap(){
   }, 900);
 }
 document.addEventListener('DOMContentLoaded', bootstrap);
-}
 </script>
 </body>
 </html>
