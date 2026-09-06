@@ -2056,7 +2056,7 @@ const VIEW_META = {
   mytasks:{title:'My Tasks', sub:'Work assigned to you'},
   myproject:{title:'My Project', sub:'Live status of your project with ELAS'},
   products:{title:'Products', sub:'Manage your digital products — apps, ebooks, templates & more'},
-  productsales:{title:'Pending Sales', sub:'Manual payment verification queue — closer-created sales awaiting admin verification'},
+  productsales:{title:'Sales', sub:'Pending and verified product sales — full hierarchy, payment and commission records'},
   myproducts:{title:'My Products', sub:'Source code products assigned to you to sell'},
   mydownloads:{title:'My Products', sub:'Your purchased products and downloads'},
   docgen:{title:'AI Documents', sub:'Generate contracts, invoices & proposals in seconds'},
@@ -5739,34 +5739,37 @@ async function releaseZip(saleId){
 async function renderProductSalesView(){
   const root = document.getElementById('view-productsales');
   if (!root) return;
-  root.innerHTML = `<div class="panel glass"><div class="panel-head"><div class="panel-title">Loading pending sales…</div></div></div>`;
+  const tab = (window._adminSalesTab === 'verified') ? 'verified' : 'pending';
+  root.innerHTML = `<div class="panel glass"><div class="panel-head"><div class="panel-title">Loading sales…</div></div></div>`;
   try {
     if (!window.ELAS_API) throw new Error('API unavailable');
-    const response = await window.ELAS_API.call('/admin/sales', null, { method: 'GET', auth: true });
-    const sales = response.sales || [];
-    const pendingCount = sales.length;
-    const totalAmount = sales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+    const [pendingRes, verifiedRes] = await Promise.all([
+      window.ELAS_API.call('/admin/sales?status=pending', null, { method: 'GET', auth: true }),
+      window.ELAS_API.call('/admin/sales?status=verified', null, { method: 'GET', auth: true }),
+    ]);
+    const pendingSales = (pendingRes && pendingRes.sales) || [];
+    const verifiedSales = (verifiedRes && verifiedRes.sales) || [];
+    const sales = tab === 'verified' ? verifiedSales : pendingSales;
+    const pendingCount = pendingSales.length;
+    const verifiedCount = verifiedSales.length;
+    const pendingAmount = pendingSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+    const verifiedAmount = verifiedSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
-    root.innerHTML = `
-      <div class="stat-grid">
-        <div class="stat-card glass"><div class="ic-badge bg-amber">⏳</div><div class="stat-val">${pendingCount}</div><div class="stat-label">Pending Verification</div></div>
-        <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(totalAmount)}</div><div class="stat-label">Pending Amount</div></div>
-        <div class="stat-card glass"><div class="ic-badge bg-violet">⊙</div><div class="stat-val">₹30k / ₹5k / ₹5k</div><div class="stat-label">Closer / PM / SM Commission</div></div>
-      </div>
-      <div class="panel glass">
-        <div class="panel-head">
-          <div class="panel-title">Pending Manual Sales</div>
-          <div class="panel-actions">
-            <button class="btn btn-ghost btn-sm" onclick="renderProductSalesView()">↻ Refresh</button>
-          </div>
-        </div>
-        <p style="font-size:12.5px;color:var(--text-dim);margin:-4px 0 14px;">
-          Closers create sales → they appear here as <strong>Payment Pending</strong>. Contact the client externally, collect payment, then Verify &amp; Approve.
-        </p>
-        ${sales.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
-          <th>Sale ID</th><th>Client</th><th>Email</th><th>Phone</th><th>Product</th><th>Amount</th><th>Closer</th><th>PM</th><th>SM</th><th>Date</th><th>Status</th><th></th>
-        </tr></thead><tbody>
-          ${sales.map(s => `<tr>
+    function salesTable(rows, emptyMsg) {
+      if (!rows.length) {
+        return `<div class="empty-state" style="padding:28px;text-align:center;color:var(--text-faint);">
+          <div style="font-size:28px;margin-bottom:8px;">${tab === 'verified' ? '✓' : '📭'}</div>
+          <div>${emptyMsg}</div>
+        </div>`;
+      }
+      return `<div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Sale ID</th><th>Client</th><th>Email</th><th>Phone</th><th>Product</th><th>Amount</th>
+        <th>Closer</th><th>PM</th><th>SM</th><th>Date</th><th>Status</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map(s => {
+          const st = s.paymentVerificationStatus || 'pending';
+          const badge = st === 'verified' ? 'bg-green' : (st === 'failed' ? 'bg-red' : 'bg-amber');
+          return `<tr>
             <td class="cell-strong" style="cursor:pointer;color:var(--accent-2)" onclick="viewSaleDetails('${escapeHtml(s.saleId)}')">${escapeHtml(s.saleId || '—')}</td>
             <td>${escapeHtml(s.clientName || '—')}</td>
             <td>${escapeHtml(s.clientEmail || s.customerEmail || '—')}</td>
@@ -5777,25 +5780,130 @@ async function renderProductSalesView(){
             <td>${escapeHtml(s.productManagerName || '—')}</td>
             <td>${escapeHtml(s.seniorManagerName || '—')}</td>
             <td class="cell-dim">${fmtDate(s.createdAt || s.createdDate)}</td>
-            <td><span class="badge bg-amber">${escapeHtml(s.paymentVerificationStatus || 'pending')}</span></td>
+            <td><span class="badge ${badge}">${escapeHtml(st)}</span></td>
             <td><button class="btn btn-primary btn-sm" onclick="viewSaleDetails('${escapeHtml(s.saleId)}')">Open</button></td>
-          </tr>`).join('')}
-        </tbody></table></div>` : `
-        <div class="empty-state" style="padding:28px;text-align:center;color:var(--text-faint);">
-          <div style="font-size:28px;margin-bottom:8px;">📭</div>
-          <div>No pending sales right now.</div>
-          <div style="font-size:12px;margin-top:6px;">When a Closer creates a sale, it will appear here automatically.</div>
-        </div>`}
+          </tr>`;
+        }).join('')}
+      </tbody></table></div>`;
+    }
+
+    root.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card glass"><div class="ic-badge bg-amber">⏳</div><div class="stat-val">${pendingCount}</div><div class="stat-label">Pending Verification</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${verifiedCount}</div><div class="stat-label">Verified Sales</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-amber">₹</div><div class="stat-val">${fmtMoney(pendingAmount)}</div><div class="stat-label">Pending Amount</div></div>
+        <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(verifiedAmount)}</div><div class="stat-label">Verified Amount</div></div>
+      </div>
+      <div class="panel glass">
+        <div class="panel-head">
+          <div class="panel-title">Sales</div>
+          <div class="panel-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn ${tab==='pending'?'btn-primary':'btn-ghost'} btn-sm" onclick="window._adminSalesTab='pending';renderProductSalesView()">Pending (${pendingCount})</button>
+            <button class="btn ${tab==='verified'?'btn-primary':'btn-ghost'} btn-sm" onclick="window._adminSalesTab='verified';renderProductSalesView()">Verified (${verifiedCount})</button>
+            <button class="btn btn-ghost btn-sm" onclick="renderProductSalesView()">↻ Refresh</button>
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:-4px 0 14px;">
+          ${tab === 'pending'
+            ? 'Closer-created sales awaiting external payment. Contact the client, collect payment, then Verify &amp; Approve.'
+            : 'Verified sales remain accessible with full hierarchy, payment and commission details.'}
+        </p>
+        ${salesTable(sales, tab === 'verified' ? 'No verified sales yet.' : 'No pending sales right now.')}
       </div>
     `;
   } catch (err) {
     console.error('[renderProductSalesView]', err);
     root.innerHTML = `
       <div class="panel glass">
-        <div class="panel-head"><div class="panel-title">Pending Sales</div></div>
+        <div class="panel-head"><div class="panel-title">Sales</div></div>
         <p style="color:var(--red);font-size:13px;">Failed to load sales: ${escapeHtml(err.message || 'Unknown error')}</p>
         <button class="btn btn-ghost" onclick="renderProductSalesView()">Retry</button>
       </div>`;
+  }
+}
+
+function _na(v){ return (v === undefined || v === null || v === '') ? 'Not available' : String(v); }
+
+function buildSaleDetailsText(sale) {
+  const st = sale.paymentVerificationStatus || sale.paymentStatus || sale.status || 'pending';
+  const c = sale.commission || {};
+  const closerAmt = c.closerAmount != null ? c.closerAmount : 30000;
+  const pmAmt = c.productManagerAmount != null ? c.productManagerAmount : 5000;
+  const smAmt = c.seniorManagerAmount != null ? c.seniorManagerAmount : 5000;
+  const total = (Number(closerAmt)||0) + (Number(pmAmt)||0) + (Number(smAmt)||0);
+  const lines = [
+    'ELAS SALE RECORD',
+    '================',
+    '',
+    'SALE',
+    'Sale ID: ' + _na(sale.saleId),
+    'Status: ' + _na(st),
+    'Created: ' + _na(sale.createdAt ? fmtDate(sale.createdAt) : null),
+    'Payment Status: ' + _na(st),
+    'Payment Method: ' + _na(sale.paymentMethod),
+    'Payment Reference: ' + _na(sale.paymentReference),
+    'Verified At: ' + _na(sale.verifiedAt ? fmtDate(sale.verifiedAt) : null),
+    'Verified By: ' + _na(sale.verifiedBy),
+    'Source: ' + _na(sale.source),
+    '',
+    'CLIENT',
+    'Client ID: ' + _na(sale.clientId),
+    'Name: ' + _na(sale.clientName || sale.customerName),
+    'Email: ' + _na(sale.clientEmail || sale.customerEmail),
+    'Phone: ' + _na(sale.clientPhone || sale.customerPhone),
+    'Company: ' + _na(sale.clientCompany || sale.customerCompany),
+    '',
+    'PRODUCT',
+    'Product ID: ' + _na(sale.productId),
+    'Product Name: ' + _na(sale.productName),
+    'Category: ' + _na(sale.productCategory),
+    'Amount: ' + (sale.amount != null ? fmtMoney(sale.amount) : 'Not available'),
+    'Currency: ' + _na(sale.currency || 'INR'),
+    '',
+    'HIERARCHY',
+    'Closer Name: ' + _na(sale.closerName),
+    'Closer User ID: ' + _na(sale.closerUserId),
+    'Closer Entity ID: ' + _na(sale.closerId),
+    'Closer Code: ' + _na(sale.closerCode),
+    'PM Name: ' + _na(sale.productManagerName),
+    'PM User ID: ' + _na(sale.productManagerId),
+    'SM Name: ' + _na(sale.seniorManagerName),
+    'SM User ID: ' + _na(sale.seniorManagerId),
+    '',
+    'COMMISSION',
+    'Closer: ₹' + Number(closerAmt).toLocaleString('en-IN'),
+    'PM: ₹' + Number(pmAmt).toLocaleString('en-IN'),
+    'SM: ₹' + Number(smAmt).toLocaleString('en-IN'),
+    'Admin: ₹0',
+    'Total: ₹' + Number(total).toLocaleString('en-IN'),
+  ];
+  if (c.ledgerId) lines.push('Ledger ID: ' + c.ledgerId);
+  return lines.join('
+');
+}
+
+async function copySaleDetails(saleId) {
+  try {
+    const response = await window.ELAS_API.call(`/admin/sales/${encodeURIComponent(saleId)}`, null, { method: 'GET', auth: true });
+    const sale = response.sale || response;
+    if (!sale || !sale.saleId) throw new Error('Sale not found');
+    const text = buildSaleDetailsText(sale);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    toast('Sale details copied.', 'success');
+  } catch (e) {
+    console.error('[copySaleDetails]', e);
+    toast(e.message || 'Could not copy sale details', 'error');
   }
 }
 
@@ -5807,8 +5915,13 @@ async function viewSaleDetails(saleId) {
     const sale = response.sale || response;
     if (!sale || !sale.saleId) throw new Error('Sale not found');
 
-    const status = sale.paymentVerificationStatus || sale.paymentStatus || 'pending';
+    const status = sale.paymentVerificationStatus || sale.paymentStatus || sale.status || 'pending';
     const isPending = status === 'pending';
+    const badge = status === 'verified' ? 'bg-green' : (status === 'failed' ? 'bg-red' : 'bg-amber');
+    const c = sale.commission;
+    const closerAmt = c && c.closerAmount != null ? c.closerAmount : (status === 'verified' ? 30000 : null);
+    const pmAmt = c && c.productManagerAmount != null ? c.productManagerAmount : (status === 'verified' ? 5000 : null);
+    const smAmt = c && c.seniorManagerAmount != null ? c.seniorManagerAmount : (status === 'verified' ? 5000 : null);
 
     const modalHTML = `
       <div class="modal-head">
@@ -5816,37 +5929,74 @@ async function viewSaleDetails(saleId) {
         <button class="modal-close" onclick="closeModal()">×</button>
       </div>
       <div class="modal-body">
+        <div class="detail-section-title">Sale Information</div>
         <div class="form-grid2">
-          <div class="field"><label>Sale ID</label><span class="stat-val" style="font-family:monospace;">${escapeHtml(sale.saleId)}</span></div>
-          <div class="field"><label>Client ID</label><span class="stat-val" style="font-family:monospace;">${escapeHtml(sale.clientId || '—')}</span></div>
-          <div class="field"><label>Customer Name</label><span class="stat-val">${escapeHtml(sale.clientName || sale.customerName || '—')}</span></div>
-          <div class="field"><label>Email</label><span class="stat-val">${escapeHtml(sale.clientEmail || sale.customerEmail || '—')}</span></div>
-          <div class="field"><label>Phone</label><span class="stat-val">${escapeHtml(sale.clientPhone || sale.customerPhone || '—')}</span></div>
-          <div class="field"><label>Company</label><span class="stat-val">${escapeHtml(sale.customerCompany || '—')}</span></div>
-          <div class="field"><label>Product</label><span class="stat-val">${escapeHtml(sale.productName || '—')}</span></div>
-          <div class="field"><label>Amount</label><span class="stat-val">${fmtMoney(sale.amount || 0)}</span></div>
-          <div class="field"><label>Closer</label><span class="stat-val">${escapeHtml(sale.closerName || '—')}</span></div>
-          <div class="field"><label>Product Manager</label><span class="stat-val">${escapeHtml(sale.productManagerName || '—')}</span></div>
-          <div class="field"><label>Senior Manager</label><span class="stat-val">${escapeHtml(sale.seniorManagerName || '—')}</span></div>
-          <div class="field"><label>Created</label><span class="stat-val">${fmtDate(sale.createdAt)}</span></div>
-          <div class="field"><label>Payment Status</label><span class="stat-val badge ${isPending ? 'bg-amber' : status === 'verified' ? 'bg-green' : 'bg-red'}">${escapeHtml(status)}</span></div>
-          ${sale.verifiedAt ? `<div class="field"><label>Verified At</label><span class="stat-val">${fmtDate(sale.verifiedAt)}</span></div>` : ''}
-          ${sale.verifiedBy ? `<div class="field"><label>Verified By</label><span class="stat-val">${escapeHtml(sale.verifiedBy)}</span></div>` : ''}
-          ${sale.paymentMethod ? `<div class="field"><label>Payment Method</label><span class="stat-val">${escapeHtml(sale.paymentMethod)}</span></div>` : ''}
-          ${sale.paymentReference ? `<div class="field"><label>Payment Reference</label><span class="stat-val">${escapeHtml(sale.paymentReference)}</span></div>` : ''}
+          <div class="field"><label>Sale ID</label><span class="stat-val" style="font-family:monospace;">${escapeHtml(_na(sale.saleId))}</span></div>
+          <div class="field"><label>Created</label><span class="stat-val">${escapeHtml(sale.createdAt ? fmtDate(sale.createdAt) : 'Not available')}</span></div>
+          <div class="field"><label>Sale Status</label><span class="stat-val badge ${badge}">${escapeHtml(status)}</span></div>
+          <div class="field"><label>Payment Verification</label><span class="stat-val badge ${badge}">${escapeHtml(status)}</span></div>
+          <div class="field"><label>Verified At</label><span class="stat-val">${escapeHtml(sale.verifiedAt ? fmtDate(sale.verifiedAt) : 'Not available')}</span></div>
+          <div class="field"><label>Verified By</label><span class="stat-val">${escapeHtml(_na(sale.verifiedBy))}</span></div>
+          <div class="field"><label>Payment Method</label><span class="stat-val">${escapeHtml(_na(sale.paymentMethod))}</span></div>
+          <div class="field"><label>Payment Reference</label><span class="stat-val">${escapeHtml(_na(sale.paymentReference))}</span></div>
+          <div class="field"><label>Source</label><span class="stat-val">${escapeHtml(_na(sale.source))}</span></div>
+          <div class="field"><label>Amount</label><span class="stat-val">${sale.amount != null ? fmtMoney(sale.amount) : 'Not available'}</span></div>
         </div>
+
+        <div class="detail-section-title" style="margin-top:16px;">Client Information</div>
+        <div class="form-grid2">
+          <div class="field"><label>Client ID</label><span class="stat-val" style="font-family:monospace;">${escapeHtml(_na(sale.clientId))}</span></div>
+          <div class="field"><label>Full Name</label><span class="stat-val">${escapeHtml(_na(sale.clientName || sale.customerName))}</span></div>
+          <div class="field"><label>Email</label><span class="stat-val">${escapeHtml(_na(sale.clientEmail || sale.customerEmail))}</span></div>
+          <div class="field"><label>Phone</label><span class="stat-val">${escapeHtml(_na(sale.clientPhone || sale.customerPhone))}</span></div>
+          <div class="field"><label>Company</label><span class="stat-val">${escapeHtml(_na(sale.clientCompany || sale.customerCompany))}</span></div>
+        </div>
+
+        <div class="detail-section-title" style="margin-top:16px;">Product Information</div>
+        <div class="form-grid2">
+          <div class="field"><label>Product ID</label><span class="stat-val" style="font-family:monospace;">${escapeHtml(_na(sale.productId))}</span></div>
+          <div class="field"><label>Product Name</label><span class="stat-val">${escapeHtml(_na(sale.productName))}</span></div>
+          <div class="field"><label>Category</label><span class="stat-val">${escapeHtml(_na(sale.productCategory))}</span></div>
+          <div class="field"><label>Currency</label><span class="stat-val">${escapeHtml(_na(sale.currency || 'INR'))}</span></div>
+        </div>
+
+        <div class="detail-section-title" style="margin-top:16px;">Hierarchy</div>
+        <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.7;">
+          Admin → SM → PM → Closer → Client → Sale
+        </div>
+        <div class="form-grid2">
+          <div class="field"><label>Closer Name</label><span class="stat-val">${escapeHtml(_na(sale.closerName))}</span></div>
+          <div class="field"><label>Closer User ID</label><span class="stat-val" style="font-family:monospace;font-size:12px;">${escapeHtml(_na(sale.closerUserId))}</span></div>
+          <div class="field"><label>Closer Entity ID</label><span class="stat-val" style="font-family:monospace;font-size:12px;">${escapeHtml(_na(sale.closerId))}</span></div>
+          <div class="field"><label>Closer Code</label><span class="stat-val">${escapeHtml(_na(sale.closerCode))}</span></div>
+          <div class="field"><label>PM Name</label><span class="stat-val">${escapeHtml(_na(sale.productManagerName))}</span></div>
+          <div class="field"><label>PM User ID</label><span class="stat-val" style="font-family:monospace;font-size:12px;">${escapeHtml(_na(sale.productManagerId))}</span></div>
+          <div class="field"><label>SM Name</label><span class="stat-val">${escapeHtml(_na(sale.seniorManagerName))}</span></div>
+          <div class="field"><label>SM User ID</label><span class="stat-val" style="font-family:monospace;font-size:12px;">${escapeHtml(_na(sale.seniorManagerId))}</span></div>
+        </div>
+
+        <div class="detail-section-title" style="margin-top:16px;">Commission</div>
+        <div class="form-grid2">
+          <div class="field"><label>Closer</label><span class="stat-val">${closerAmt != null ? fmtMoney(closerAmt) : 'Not generated yet'}</span></div>
+          <div class="field"><label>PM</label><span class="stat-val">${pmAmt != null ? fmtMoney(pmAmt) : 'Not generated yet'}</span></div>
+          <div class="field"><label>SM</label><span class="stat-val">${smAmt != null ? fmtMoney(smAmt) : 'Not generated yet'}</span></div>
+          <div class="field"><label>Admin</label><span class="stat-val">${fmtMoney(0)}</span></div>
+          ${c && c.ledgerId ? `<div class="field"><label>Ledger ID</label><span class="stat-val" style="font-family:monospace;font-size:12px;">${escapeHtml(c.ledgerId)}</span></div>` : ''}
+        </div>
+
         ${isPending ? `
         <div style="margin-top:16px;padding:12px;border-radius:12px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.2);font-size:12.5px;color:var(--text-dim);line-height:1.55;">
           <strong style="color:var(--accent-2);">Manual verification</strong><br>
-          Contact the client, collect payment outside the CRM, then approve. Commission ledger (Closer ₹30,000 · PM ₹5,000 · SM ₹5,000) is generated once by the server.
+          Contact the client, collect payment outside the CRM, then approve. Commission ledger is generated once by the server.
         </div>
         <div class="form-grid2" style="margin-top:14px;">
           <div class="field"><label>Payment method (optional)</label><input type="text" id="verify_paymentMethod" placeholder="UPI / Bank Transfer / Cash"></div>
           <div class="field"><label>Payment reference (optional)</label><input type="text" id="verify_paymentReference" placeholder="UTR / Txn ID"></div>
         </div>` : ''}
       </div>
-      <div class="modal-foot">
-        ${isPending ? `<button class="btn btn-primary" onclick="verifySalePayment('${escapeHtml(sale.saleId)}')">Verify &amp; Approve Payment</button>` : ''}
+      <div class="modal-foot" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="copySaleDetails('${escapeHtml(sale.saleId)}')">Copy Sale Details</button>
+        ${isPending ? `<button class="btn btn-primary" id="verifySaleBtn" onclick="verifySalePayment('${escapeHtml(sale.saleId)}')">Verify &amp; Approve Payment</button>` : ''}
         <button class="btn btn-ghost" onclick="closeModal()">Close</button>
       </div>
     `;
@@ -5865,6 +6015,8 @@ async function verifySalePayment(saleId) {
   }
   const paymentMethod = ((document.getElementById('verify_paymentMethod') || {}).value || '').trim() || null;
   const paymentReference = ((document.getElementById('verify_paymentReference') || {}).value || '').trim() || null;
+  const btn = document.getElementById('verifySaleBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
 
   try {
     const body = {};
@@ -5875,16 +6027,18 @@ async function verifySalePayment(saleId) {
       body,
       { method: 'POST', auth: true }
     );
-    if (response.success) {
+    if (response && response.success) {
       toast('Payment verified — commission ledger generated', 'success');
       closeModal();
+      window._adminSalesTab = 'verified';
       renderProductSalesView();
     } else {
-      throw new Error(response.error || 'Failed to verify payment');
+      throw new Error((response && response.error) || 'Failed to verify payment');
     }
   } catch (err) {
     console.error('[verifySalePayment]', err);
     toast(err.message || 'Failed to verify payment', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Verify & Approve Payment'; }
   }
 }
 

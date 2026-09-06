@@ -932,6 +932,7 @@ router.get('/products/:productId', requireAuth, async (req, res, next) => {
 });
 
 // GET /admin/sales
+// Query: ?status=pending|verified|all  (default: pending)
 router.get('/sales', requireAuth, async (req, res, next) => {
   try {
     const caller = await getFirestoreUserByAuthUid(req.authUid);
@@ -942,35 +943,59 @@ router.get('/sales', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
     const db = getAdminDb();
-    // Prefer paymentVerificationStatus filter (manual flow). Fall back to status/paymentStatus
-    // pending so prepare-sale records created before the field was written are still visible.
+    const statusFilter = String((req.query && req.query.status) || 'pending').toLowerCase();
+
     let salesSnapshot;
-    try {
-      salesSnapshot = await db.collection('sales')
-        .where('paymentVerificationStatus', '==', 'pending')
-        .get();
-    } catch (qErr) {
-      console.warn('[admin/sales] paymentVerificationStatus query failed, falling back:', qErr.message);
-      salesSnapshot = await db.collection('sales').where('status', '==', 'pending').get();
+    if (statusFilter === 'all') {
+      salesSnapshot = await db.collection('sales').get();
+    } else if (statusFilter === 'verified') {
+      try {
+        salesSnapshot = await db.collection('sales')
+          .where('paymentVerificationStatus', '==', 'verified')
+          .get();
+      } catch (qErr) {
+        console.warn('[admin/sales] verified query failed:', qErr.message);
+        salesSnapshot = await db.collection('sales').where('status', '==', 'verified').get();
+      }
+    } else {
+      // pending (default)
+      try {
+        salesSnapshot = await db.collection('sales')
+          .where('paymentVerificationStatus', '==', 'pending')
+          .get();
+      } catch (qErr) {
+        console.warn('[admin/sales] pending query failed:', qErr.message);
+        salesSnapshot = await db.collection('sales').where('status', '==', 'pending').get();
+      }
     }
+
     const sales = [];
     for (const doc of salesSnapshot.docs) {
       const sale = { id: doc.id, ...doc.data() };
-      // Skip already-verified if we fell back to status query
-      if (sale.paymentVerificationStatus === 'verified' || sale.paymentStatus === 'verified' || sale.status === 'verified') {
-        continue;
-      }
+      const pvs = sale.paymentVerificationStatus
+        || ((sale.status === 'verified' || sale.paymentStatus === 'verified') ? 'verified' : 'pending');
+
+      if (statusFilter === 'pending' && pvs === 'verified') continue;
+      if (statusFilter === 'verified' && pvs !== 'verified') continue;
+
       let closerName = null;
+      let closerCode = sale.closerCode || null;
       let productManagerName = null;
       let seniorManagerName = null;
       let clientName = sale.customerName || null;
       let clientEmail = sale.customerEmail || '';
       let clientPhone = sale.customerPhone || '';
+      let clientCompany = sale.customerCompany || '';
       let clientCountry = '';
       let productName = sale.productName || '';
+
       if (sale.closerId) {
         const closerDoc = await db.collection('closers').doc(sale.closerId).get();
-        if (closerDoc.exists) closerName = closerDoc.data().name;
+        if (closerDoc.exists) {
+          const c = closerDoc.data();
+          closerName = c.name || closerName;
+          closerCode = closerCode || c.closerId || null;
+        }
       }
       if (sale.productManagerId) {
         const pmDoc = await db.collection('users').doc(sale.productManagerId).get();
@@ -987,12 +1012,14 @@ router.get('/sales', requireAuth, async (req, res, next) => {
           clientName = client.name || clientName || '';
           clientEmail = client.email || clientEmail || '';
           clientPhone = client.phone || clientPhone || '';
+          clientCompany = client.company || clientCompany || '';
         }
       }
       if (!productName && sale.productId) {
         const productDoc = await db.collection('products').doc(sale.productId).get();
         if (productDoc.exists) productName = productDoc.data().name;
       }
+
       sales.push({
         id: sale.id,
         saleId: sale.saleId,
@@ -1000,25 +1027,31 @@ router.get('/sales', requireAuth, async (req, res, next) => {
         clientName,
         clientEmail,
         clientPhone,
+        clientCompany,
         clientCountry,
         productId: sale.productId || null,
         productName,
         amount: sale.amount,
         closerId: sale.closerId || null,
+        closerCode,
         closerName,
         productManagerId: sale.productManagerId || null,
         productManagerName,
         seniorManagerId: sale.seniorManagerId || null,
         seniorManagerName,
         createdAt: sale.createdAt,
-        paymentVerificationStatus: sale.paymentVerificationStatus || 'pending',
-        status: sale.status || 'pending',
-        paymentStatus: sale.paymentStatus || 'pending',
+        paymentVerificationStatus: pvs,
+        status: sale.status || pvs,
+        paymentStatus: sale.paymentStatus || pvs,
+        verifiedAt: sale.verifiedAt || null,
+        verifiedBy: sale.verifiedBy || null,
+        paymentMethod: sale.paymentMethod || null,
+        paymentReference: sale.paymentReference || null,
+        source: sale.source || null,
       });
     }
-    // Newest first (createdAt is ISO string)
     sales.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    return res.json({ sales });
+    return res.json({ sales, filter: statusFilter });
   } catch (err) {
     next(err);
   }
@@ -1044,75 +1077,127 @@ router.get('/sales/:saleId', requireAuth, async (req, res, next) => {
       return res.status(404).json({ error: 'Sale not found' });
     }
     const sale = { id: saleDoc.id, ...saleDoc.data() };
-    // Fetch related names
+
     let closerName = null;
+    let closerCode = sale.closerCode || null;
+    let closerUserId = null;
     let productManagerName = null;
     let seniorManagerName = null;
-    let clientName = null;
-    let clientEmail = '';
-    let clientPhone = '';
+    let clientName = sale.customerName || null;
+    let clientEmail = sale.customerEmail || '';
+    let clientPhone = sale.customerPhone || '';
+    let clientCompany = sale.customerCompany || '';
     let clientCountry = '';
-    let productName = '';
+    let productName = sale.productName || '';
+    let productCategory = null;
+    let productPrice = sale.amount || null;
+
     if (sale.closerId) {
       const closerDoc = await db.collection('closers').doc(sale.closerId).get();
-      if (closerDoc.exists) closerName = closerDoc.data().name;
+      if (closerDoc.exists) {
+        const c = closerDoc.data();
+        closerName = c.name || null;
+        closerCode = closerCode || c.closerId || null;
+        closerUserId = c.userId || null;
+      }
+      if (!closerUserId) {
+        const uq = await db.collection('users').where('entityId', '==', sale.closerId).where('role', '==', 'closer').limit(1).get();
+        if (!uq.empty) closerUserId = uq.docs[0].id;
+      }
     }
     if (sale.productManagerId) {
       const pmDoc = await db.collection('users').doc(sale.productManagerId).get();
-      if (pmDoc.exists) productManagerName = pmDoc.data().name;
+      if (pmDoc.exists) productManagerName = pmDoc.data().name || null;
     }
     if (sale.seniorManagerId) {
       const smDoc = await db.collection('users').doc(sale.seniorManagerId).get();
-      if (smDoc.exists) seniorManagerName = smDoc.data().name;
+      if (smDoc.exists) seniorManagerName = smDoc.data().name || null;
     }
     if (sale.clientId) {
       const clientDoc = await db.collection('clients').doc(sale.clientId).get();
       if (clientDoc.exists) {
         const client = clientDoc.data();
-        clientName = client.name || '';
-        clientEmail = client.email || '';
-        clientPhone = client.phone || '';
-        // Note: No country field in client schema; leave blank
+        clientName = client.name || clientName || '';
+        clientEmail = client.email || clientEmail || '';
+        clientPhone = client.phone || clientPhone || '';
+        clientCompany = client.company || clientCompany || '';
       }
     }
     if (sale.productId) {
       const productDoc = await db.collection('products').doc(sale.productId).get();
-      if (productDoc.exists) productName = productDoc.data().name;
+      if (productDoc.exists) {
+        const p = productDoc.data();
+        productName = productName || p.name || '';
+        productCategory = p.category || null;
+        if (productPrice == null) productPrice = p.price || null;
+      }
     }
-    // Prefer linked client, fall back to sale.customer* fields written at create time
-    if (!clientName) clientName = sale.customerName || null;
-    if (!clientEmail) clientEmail = sale.customerEmail || '';
-    if (!clientPhone) clientPhone = sale.customerPhone || '';
-    if (!productName) productName = sale.productName || '';
+
+    // Commission ledger for this sale (if generated)
+    let commission = null;
+    try {
+      const ledgerSnap = await db.collection('commissionLedger')
+        .where('saleId', '==', sale.saleId)
+        .limit(1)
+        .get();
+      if (!ledgerSnap.empty) {
+        const L = ledgerSnap.docs[0].data();
+        commission = {
+          ledgerId: L.id || ledgerSnap.docs[0].id,
+          closerAmount: L.closerAmount || 0,
+          productManagerAmount: L.productManagerAmount || 0,
+          seniorManagerAmount: L.seniorManagerAmount || 0,
+          adminAmount: 0,
+          total: (Number(L.closerAmount)||0) + (Number(L.productManagerAmount)||0) + (Number(L.seniorManagerAmount)||0),
+          status: L.status || null,
+          payoutStatus: L.payoutStatus || null,
+          currency: L.currency || 'INR',
+        };
+      }
+    } catch (ledgerErr) {
+      console.warn('[admin/sales/:id] commission ledger read failed:', ledgerErr.message);
+    }
+
+    const pvs = sale.paymentVerificationStatus
+      || ((sale.status === 'verified' || sale.paymentStatus === 'verified') ? 'verified' : 'pending');
 
     const saleInfo = {
       id: sale.id,
       saleId: sale.saleId,
       clientId: sale.clientId || null,
-      clientName,
-      clientEmail,
-      clientPhone,
-      clientCountry,
+      clientName: clientName || null,
+      clientEmail: clientEmail || '',
+      clientPhone: clientPhone || '',
+      clientCompany: clientCompany || '',
+      clientCountry: clientCountry || '',
+      customerName: sale.customerName || clientName || null,
+      customerEmail: sale.customerEmail || clientEmail || '',
+      customerPhone: sale.customerPhone || clientPhone || '',
+      customerCompany: sale.customerCompany || clientCompany || '',
       productId: sale.productId || null,
-      productName,
-      amount: sale.amount,
+      productName: productName || null,
+      productCategory,
+      amount: sale.amount != null ? sale.amount : productPrice,
+      currency: sale.currency || 'INR',
       closerId: sale.closerId || null,
-      closerName,
+      closerCode: closerCode || null,
+      closerName: closerName || null,
+      closerUserId: closerUserId || null,
       productManagerId: sale.productManagerId || null,
-      productManagerName,
+      productManagerName: productManagerName || null,
       seniorManagerId: sale.seniorManagerId || null,
-      seniorManagerName,
-      createdAt: sale.createdAt,
-      paymentVerificationStatus: sale.paymentVerificationStatus || 'pending',
-      verifiedAt: sale.verifiedAt,
-      verifiedBy: sale.verifiedBy,
-      paymentMethod: sale.paymentMethod,
-      paymentReference: sale.paymentReference,
-      status: sale.status,
-      paymentStatus: sale.paymentStatus,
-      deliveryStatus: sale.deliveryStatus,
-      source: sale.source,
-      customerCompany: sale.customerCompany || '',
+      seniorManagerName: seniorManagerName || null,
+      createdAt: sale.createdAt || null,
+      paymentVerificationStatus: pvs,
+      status: sale.status || pvs,
+      paymentStatus: sale.paymentStatus || pvs,
+      deliveryStatus: sale.deliveryStatus || null,
+      verifiedAt: sale.verifiedAt || null,
+      verifiedBy: sale.verifiedBy || null,
+      paymentMethod: sale.paymentMethod || null,
+      paymentReference: sale.paymentReference || null,
+      source: sale.source || null,
+      commission,
     };
     return res.json({ sale: saleInfo });
   } catch (err) {
