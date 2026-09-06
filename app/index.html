@@ -5878,8 +5878,7 @@ function buildSaleDetailsText(sale) {
     'Total: ₹' + Number(total).toLocaleString('en-IN'),
   ];
   if (c.ledgerId) lines.push('Ledger ID: ' + c.ledgerId);
-  return lines.join('
-');
+  return lines.join('\n');
 }
 
 async function copySaleDetails(saleId) {
@@ -8270,32 +8269,51 @@ function closeGlobalSearch(){
 }
 
 async function bootstrap(){
-  await loadDB();
-  const firstRunKey = await ensureBootstrap();
-  wireStaticEvents();
+  try {
+    await loadDB();
+  } catch (e) {
+    console.error('[bootstrap] loadDB failed:', e);
+  }
+  try {
+    await ensureBootstrap();
+  } catch (e) {
+    console.error('[bootstrap] ensureBootstrap failed:', e);
+  }
+  try {
+    wireStaticEvents();
+  } catch (e) {
+    console.error('[bootstrap] wireStaticEvents failed:', e);
+  }
 
-  setTimeout(async () => {
-    // With real Firebase Auth, the session check has changed: we need a valid
-    // Firebase Auth token AND a matching Firestore user doc. The onAuthStateChanged
-    // listener (registered earlier) will resolve CURRENT_USER on its own. We just
-    // need to decide which screen to show after the listener fires.
-    if(typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser){
-      // Firebase Auth session is active — listener will set CURRENT_USER + showApp
-      // We still attach a tiny safety: if the listener is delayed, fall back to
-      // showing the app shell after a short grace period.
-      setTimeout(() => {
-        if(CURRENT_USER && document.getElementById('appShell') && document.getElementById('appShell').classList.contains('hidden')){
-          showApp();
-        }
-      }, 800);
-    }else{
-      if(isLoggedIn()) clearLoggedIn();
-      showScreen('loginScreen');
+  // Always leave the loading screen within a bounded time.
+  // Auth listener calls showApp() on success; this is the safety net.
+  const leaveLoading = () => {
+    const loading = document.getElementById('loadingScreen');
+    if (!loading || loading.classList.contains('hidden')) return;
+    if (CURRENT_USER) {
+      showApp();
+      return;
     }
-    // No first-run key modal — accounts are now provisioned server-side via
-    // the bootstrapAdmin HTTP endpoint, and passwords are not auto-generated
-    // for the client to display.
-  }, 900);
+    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+      // Auth exists but profile still resolving — give a bit more time, then login
+      setTimeout(() => {
+        const stillLoading = document.getElementById('loadingScreen');
+        if (stillLoading && !stillLoading.classList.contains('hidden')) {
+          if (CURRENT_USER) showApp();
+          else showScreen('loginScreen');
+        }
+      }, 1500);
+      return;
+    }
+    if (typeof isLoggedIn === 'function' && isLoggedIn()) {
+      try { clearLoggedIn(); } catch (_) {}
+    }
+    showScreen('loginScreen');
+  };
+
+  setTimeout(leaveLoading, 1200);
+  // Hard ceiling: never stay on loading longer than 5s
+  setTimeout(leaveLoading, 5000);
 }
 document.addEventListener('DOMContentLoaded', bootstrap);
 
