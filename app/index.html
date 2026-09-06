@@ -4291,9 +4291,17 @@ async function handleCreateSale(){
     return;
   }
 
-  if (!window.ELAS_API || !window.ELAS_API.createSale) {
+  if (!window.ELAS_API) {
     if (err) {
       err.textContent = 'Connection required. Please reload when online.';
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  if (!CURRENT_USER) {
+    if (err) {
+      err.textContent = 'You are not logged in. Please sign in again.';
       err.style.display = 'block';
     }
     return;
@@ -4302,16 +4310,43 @@ async function handleCreateSale(){
   if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
 
   try {
-    const closerCode = window.CURRENT_USER?.loginId || '';
-    if (!closerCode) {
-      throw new Error('Unable to determine your Closer code. Please log in again.');
+    let data = null;
+    const customer = { name, email, phone, company };
+
+    // Preferred path for hierarchy-created Closers (and privileged roles):
+    // authenticated prepare-sale locks attribution server-side from the caller's identity.
+    // This is the correct path when the Closer was created under a PM in the hierarchy.
+    const canUsePrepare = CURRENT_USER.role === 'closer' ||
+      CURRENT_USER.role === 'admin' ||
+      CURRENT_USER.role === 'senior_manager';
+
+    if (canUsePrepare && typeof window.ELAS_API.prepareSale === 'function') {
+      data = await window.ELAS_API.prepareSale({
+        productId,
+        customer
+      });
     }
 
-    const data = await window.ELAS_API.createSale({
-      closerCode,
-      productId,
-      customer: { name, email, phone, company }
-    });
+    // Fallback: legacy public createSale that requires a closerCode
+    if (!data || !data.success) {
+      const closerCode = (
+        (CURRENT_USER.loginId && String(CURRENT_USER.loginId).trim()) ||
+        (CURRENT_USER.entityId && String(CURRENT_USER.entityId).trim()) ||
+        (CURRENT_USER.id && String(CURRENT_USER.id).trim()) ||
+        ''
+      );
+      if (!closerCode) {
+        throw new Error('Unable to determine your Closer identity. Please log out and log in again.');
+      }
+      if (!window.ELAS_API.createSale) {
+        throw new Error((data && data.error) || 'Sale creation is unavailable. Please try again.');
+      }
+      data = await window.ELAS_API.createSale({
+        closerCode,
+        productId,
+        customer
+      });
+    }
 
     if (!data || !data.success || !data.saleId) {
       throw new Error((data && data.error) || 'Failed to create sale');
@@ -4328,14 +4363,18 @@ async function handleCreateSale(){
             Sale ID: <strong style="color:var(--accent);font-family:monospace;letter-spacing:1px;">${escapeHtml(data.saleId)}</strong>
           </div>
           <div style="font-size:12.5px;color:var(--text-dim);">
-            The sale is pending payment verification. Share the Sale ID with your admin for verification.
+            The sale is pending payment verification. Share the Sale ID with your admin so they can verify the payment and release commissions.
           </div>
+          ${data.paymentUrl ? `
+          <div style="margin-top:12px;font-size:12px;color:var(--text-faint);">
+            Reference link: <a href="${escapeHtml(data.paymentUrl)}" target="_blank" style="color:var(--accent-2);word-break:break-all;">${escapeHtml(data.paymentUrl)}</a>
+          </div>` : ''}
         </div>
       `;
       result.style.display = 'block';
     }
 
-    toast('Sale created successfully', 'success');
+    toast('Sale created successfully — pending admin verification', 'success');
   } catch (e) {
     console.error('[handleCreateSale]', e);
     if (err) {
@@ -4345,8 +4384,8 @@ async function handleCreateSale(){
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Create Sale'; }
   }
-
 }
+
 async function handleCreatePaymentLink(){
   await handleCreateSale();
 }

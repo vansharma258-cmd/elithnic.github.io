@@ -692,37 +692,17 @@ router.post('/sale', async (req, res, next) => {
       productManagerId: pmId, seniorManagerId: smId,
       customerName: customer.name, customerEmail: customer.email,
       customerPhone: customer.phone, customerCompany: customer.company || '',
-      createdAt: now, source: 'web-checkout'
+      createdAt: now, source: 'web-checkout',
+      paymentVerificationStatus: 'pending',
+      verifiedAt: null,
+      verifiedBy: null,
+      paymentMethod: null,
+      paymentReference: null
     };
     await db.collection('sales').doc(saleId).set(sale);
 
-    // 6. Create PayU session
-    if (!payu.isConfigured()) {
-      return res.json({ success: false, error: 'PayU is not configured. Contact support.' });
-    }
-
-    const apiBase = process.env.API_BASE_URL || `https://elas-api.onrender.com`;
-    const callbackUrl = process.env.PAYU_CALLBACK_URL || `${apiBase}/webhook/payu`;
-    // Same fix: use the server-side redirect endpoint for surl/furl so PayU
-    // can POST the browser successfully.
-    const successUrl = process.env.PAYU_SUCCESS_URL || `${apiBase}/pay/payu-success`;
-    const failureUrl = process.env.PAYU_FAILURE_URL || `${apiBase}/pay/payu-success`;
-
-    const session = await payu.createSession({
-      amount, currency: 'INR',
-      productinfo: product.name,
-      firstname: (customer.name || 'Customer').split(' ')[0],
-      email: customer.email,
-      phone: customer.phone,
-      saleId, callbackUrl, successUrl, failureUrl
-    });
-
-    await db.collection('sales').doc(saleId).update({
-      gatewaySessionId: session.txnid,
-      paymentInitiatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // 7. Return only customer-facing data
+    // 6. No PayU session creation for manual flow
+    // Return simplified response
     return res.json({
       success: true,
       saleId,
@@ -732,11 +712,6 @@ router.post('/sale', async (req, res, next) => {
       closerName: closer.name || normalizedCode,
       productManagerName: pm.name || null,
       seniorManagerName: smDoc.data().name || null,
-      txnid: session.txnid,
-      gateway: session.gateway,
-      environment: session.environment,
-      paymentUrl: session.paymentUrl,
-      params: session.params
     });
 
   } catch (err) {

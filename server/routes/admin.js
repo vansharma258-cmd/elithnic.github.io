@@ -26,6 +26,7 @@ const router = express.Router();
 const { getAdminDb, getFirestoreUserByAuthUid, getFirestoreUserByLoginId,
         buildCustomClaims, sanitizeUserForClient } = require('../shared/firestore');
 const { requireAuth } = require('./auth');
+const { generateCommissionLedger } = require('../shared/commissionService');
 
 // ============================================================
 // Hierarchy Authorization Helpers
@@ -923,6 +924,253 @@ router.get('/products/:productId', requireAuth, async (req, res, next) => {
     }
 
     return res.json({ product: safe });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /admin/sales
+router.get('/sales', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(404).json({ error: 'Caller not found' });
+    }
+    if (caller.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const db = getAdminDb();
+    const salesSnapshot = await db.collection('sales')
+      .where('paymentVerificationStatus', '==', 'pending')
+      .orderBy('createdAt', 'desc')
+      .get();
+    const sales = [];
+    for (const doc of salesSnapshot.docs) {
+      const sale = { id: doc.id, ...doc.data() };
+      let closerName = null;
+      let productManagerName = null;
+      let seniorManagerName = null;
+      let clientName = null;
+      let clientEmail = '';
+      let clientPhone = '';
+      let clientCountry = '';
+      let productName = '';
+      if (sale.closerId) {
+        const closerDoc = await db.collection('closers').doc(sale.closerId).get();
+        if (closerDoc.exists) closerName = closerDoc.data().name;
+      }
+      if (sale.productManagerId) {
+        const pmDoc = await db.collection('users').doc(sale.productManagerId).get();
+        if (pmDoc.exists) productManagerName = pmDoc.data().name;
+      }
+      if (sale.seniorManagerId) {
+        const smDoc = await db.collection('users').doc(sale.seniorManagerId).get();
+        if (smDoc.exists) seniorManagerName = smDoc.data().name;
+      }
+      if (sale.clientId) {
+        const clientDoc = await db.collection('clients').doc(sale.clientId).get();
+        if (clientDoc.exists) {
+          const client = clientDoc.data();
+          clientName = client.name || '';
+          clientEmail = client.email || '';
+          clientPhone = client.phone || '';
+          // Note: No country field in client schema; leave blank
+        }
+      }
+      if (sale.productId) {
+        const productDoc = await db.collection('products').doc(sale.productId).get();
+        if (productDoc.exists) productName = productDoc.data().name;
+      }
+      sales.push({
+        id: sale.id,
+        saleId: sale.saleId,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientCountry,
+        productName,
+        amount: sale.amount,
+        closerName,
+        productManagerName,
+        seniorManagerName,
+        createdAt: sale.createdAt,
+        paymentVerificationStatus: sale.paymentVerificationStatus
+      });
+    }
+    return res.json({ sales });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /admin/sales/:saleId
+router.get('/sales/:saleId', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(404).json({ error: 'Caller not found' });
+    }
+    if (caller.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { saleId } = req.params;
+    if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
+      return res.status(400).json({ error: 'Invalid sale ID' });
+    }
+    const db = getAdminDb();
+    const saleDoc = await db.collection('sales').doc(saleId).get();
+    if (!saleDoc.exists) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+    const sale = { id: saleDoc.id, ...saleDoc.data() };
+    // Fetch related names
+    let closerName = null;
+    let productManagerName = null;
+    let seniorManagerName = null;
+    let clientName = null;
+    let clientEmail = '';
+    let clientPhone = '';
+    let clientCountry = '';
+    let productName = '';
+    if (sale.closerId) {
+      const closerDoc = await db.collection('closers').doc(sale.closerId).get();
+      if (closerDoc.exists) closerName = closerDoc.data().name;
+    }
+    if (sale.productManagerId) {
+      const pmDoc = await db.collection('users').doc(sale.productManagerId).get();
+      if (pmDoc.exists) productManagerName = pmDoc.data().name;
+    }
+    if (sale.seniorManagerId) {
+      const smDoc = await db.collection('users').doc(sale.seniorManagerId).get();
+      if (smDoc.exists) seniorManagerName = smDoc.data().name;
+    }
+    if (sale.clientId) {
+      const clientDoc = await db.collection('clients').doc(sale.clientId).get();
+      if (clientDoc.exists) {
+        const client = clientDoc.data();
+        clientName = client.name || '';
+        clientEmail = client.email || '';
+        clientPhone = client.phone || '';
+        // Note: No country field in client schema; leave blank
+      }
+    }
+    if (sale.productId) {
+      const productDoc = await db.collection('products').doc(sale.productId).get();
+      if (productDoc.exists) productName = productDoc.data().name;
+    }
+    const saleInfo = {
+      id: sale.id,
+      saleId: sale.saleId,
+      clientName,
+      clientEmail,
+      clientPhone,
+      clientCountry,
+      productName,
+      amount: sale.amount,
+      closerName,
+      productManagerName,
+      seniorManagerName,
+      createdAt: sale.createdAt,
+      paymentVerificationStatus: sale.paymentVerificationStatus,
+      verifiedAt: sale.verifiedAt,
+      verifiedBy: sale.verifiedBy,
+      paymentMethod: sale.paymentMethod,
+      paymentReference: sale.paymentReference,
+      status: sale.status,
+      paymentStatus: sale.paymentStatus,
+      deliveryStatus: sale.deliveryStatus,
+      source: sale.source
+    };
+    return res.json({ sale: saleInfo });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /admin/sales/:saleId/verify
+router.post('/sales/:saleId/verify', requireAuth, async (req, res, next) => {
+  try {
+    const caller = await getFirestoreUserByAuthUid(req.authUid);
+    if (!caller) {
+      return res.status(404).json({ error: 'Caller not found' });
+    }
+    if (caller.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { saleId } = req.params;
+    if (!saleId || typeof saleId !== 'string' || !/^SALE-\d+$/.test(saleId)) {
+      return res.status(400).json({ error: 'Invalid sale ID' });
+    }
+    const { paymentMethod, paymentReference } = req.body || {};
+    const db = getAdminDb();
+    const saleRef = db.collection('sales').doc(saleId);
+    // First, read the sale to see if it's already verified
+    const saleSnap = await saleRef.get();
+    if (!saleSnap.exists) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+    const sale = { id: saleSnap.id, ...saleSnap.data() };
+    let needsVerification = false;
+    if (sale.paymentVerificationStatus === 'pending') {
+      needsVerification = true;
+    } else if (sale.paymentVerificationStatus !== 'verified') {
+      // Other statuses like 'failed' maybe? We'll treat as error.
+      return res.status(400).json({ error: `Sale cannot be verified from status: ${sale.paymentVerificationStatus}` });
+    }
+    // If pending, run transaction to mark as verified
+    if (needsVerification) {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(saleRef);
+        if (!snap.exists) {
+          throw new Error('Sale not found');
+        }
+        const current = { id: snap.id, ...snap.data() };
+        if (current.paymentVerificationStatus !== 'pending') {
+          throw new Error('Sale is no longer pending verification');
+        }
+        const updateData = {
+          status: 'verified',
+          paymentStatus: 'verified',
+          paymentVerificationStatus: 'verified',
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+          verifiedBy: caller.id
+        };
+        if (paymentMethod !== undefined && paymentMethod !== null) {
+          updateData.paymentMethod = paymentMethod;
+        }
+        if (paymentReference !== undefined && paymentReference !== null) {
+          updateData.paymentReference = paymentReference;
+        }
+        tx.update(saleRef, updateData);
+      });
+      // After transaction, update our local sale object to reflect verified state
+      sale.status = 'verified';
+      sale.paymentStatus = 'verified';
+      sale.paymentVerificationStatus = 'verified';
+      // Note: verifiedAt and verifiedBy are set by server; we'll read again later
+    }
+    // Now, ensure we have the latest sale data (after transaction if any)
+    const updatedSnap = await saleRef.get();
+    const updatedSale = { id: updatedSnap.id, ...updatedSnap.data() };
+    // Generate commission ledger (idempotent)
+    const commissionResult = await generateCommissionLedger(
+      updatedSale.id,
+      `manual_${updatedSale.id}`,
+      updatedSale
+    );
+    if (!commissionResult.success) {
+      // Commission generation failed, but sale is verified.
+      // We return an error but do not change the sale state.
+      return res.status(500).json({
+        error: `Failed to generate commission ledger: ${commissionResult.error}`,
+        saleId: updatedSale.id
+      });
+    }
+    return res.json({
+      success: true,
+      saleId: updatedSale.id,
+      commissionLedgerId: commissionResult.ledgerId
+    });
   } catch (err) {
     next(err);
   }

@@ -50,7 +50,7 @@ async function generateCommissionLedger(saleId, transactionId, sale) {
       return { success: false, error: 'Closer missing managerId (Product Manager)' };
     }
 
-    const pmDoc = await db.collection('managers').doc(productManagerId).get();
+    const pmDoc = await db.collection('users').doc(productManagerId).get();
     if (!pmDoc.exists) {
       return { success: false, error: 'Product Manager not found' };
     }
