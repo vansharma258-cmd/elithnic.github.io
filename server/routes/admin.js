@@ -245,6 +245,7 @@ router.post('/users', requireAuth, async (req, res, next) => {
         .digest('hex').slice(0, 16);
       const closerEntity = {
         id: closerEntityId,
+        closerId: normalizedLoginId,            // canonical closer code = loginId (for PATH B lookup)
         name,
         whatsapp: (whatsapp || '').toString().trim(),
         email: (email || '').toString().trim(),
@@ -266,6 +267,7 @@ router.post('/users', requireAuth, async (req, res, next) => {
           .digest('hex').slice(0, 16);
         const closerEntity = {
           id: closerEntityId,
+          closerId: normalizedLoginId,            // canonical closer code = loginId
           name,
           whatsapp: (whatsapp || '').toString().trim(),
           email: (email || '').toString().trim(),
@@ -940,21 +942,32 @@ router.get('/sales', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
     const db = getAdminDb();
-    const salesSnapshot = await db.collection('sales')
-      .where('paymentVerificationStatus', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .get();
+    // Prefer paymentVerificationStatus filter (manual flow). Fall back to status/paymentStatus
+    // pending so prepare-sale records created before the field was written are still visible.
+    let salesSnapshot;
+    try {
+      salesSnapshot = await db.collection('sales')
+        .where('paymentVerificationStatus', '==', 'pending')
+        .get();
+    } catch (qErr) {
+      console.warn('[admin/sales] paymentVerificationStatus query failed, falling back:', qErr.message);
+      salesSnapshot = await db.collection('sales').where('status', '==', 'pending').get();
+    }
     const sales = [];
     for (const doc of salesSnapshot.docs) {
       const sale = { id: doc.id, ...doc.data() };
+      // Skip already-verified if we fell back to status query
+      if (sale.paymentVerificationStatus === 'verified' || sale.paymentStatus === 'verified' || sale.status === 'verified') {
+        continue;
+      }
       let closerName = null;
       let productManagerName = null;
       let seniorManagerName = null;
-      let clientName = null;
-      let clientEmail = '';
-      let clientPhone = '';
+      let clientName = sale.customerName || null;
+      let clientEmail = sale.customerEmail || '';
+      let clientPhone = sale.customerPhone || '';
       let clientCountry = '';
-      let productName = '';
+      let productName = sale.productName || '';
       if (sale.closerId) {
         const closerDoc = await db.collection('closers').doc(sale.closerId).get();
         if (closerDoc.exists) closerName = closerDoc.data().name;
@@ -971,32 +984,40 @@ router.get('/sales', requireAuth, async (req, res, next) => {
         const clientDoc = await db.collection('clients').doc(sale.clientId).get();
         if (clientDoc.exists) {
           const client = clientDoc.data();
-          clientName = client.name || '';
-          clientEmail = client.email || '';
-          clientPhone = client.phone || '';
-          // Note: No country field in client schema; leave blank
+          clientName = client.name || clientName || '';
+          clientEmail = client.email || clientEmail || '';
+          clientPhone = client.phone || clientPhone || '';
         }
       }
-      if (sale.productId) {
+      if (!productName && sale.productId) {
         const productDoc = await db.collection('products').doc(sale.productId).get();
         if (productDoc.exists) productName = productDoc.data().name;
       }
       sales.push({
         id: sale.id,
         saleId: sale.saleId,
+        clientId: sale.clientId || null,
         clientName,
         clientEmail,
         clientPhone,
         clientCountry,
+        productId: sale.productId || null,
         productName,
         amount: sale.amount,
+        closerId: sale.closerId || null,
         closerName,
+        productManagerId: sale.productManagerId || null,
         productManagerName,
+        seniorManagerId: sale.seniorManagerId || null,
         seniorManagerName,
         createdAt: sale.createdAt,
-        paymentVerificationStatus: sale.paymentVerificationStatus
+        paymentVerificationStatus: sale.paymentVerificationStatus || 'pending',
+        status: sale.status || 'pending',
+        paymentStatus: sale.paymentStatus || 'pending',
       });
     }
+    // Newest first (createdAt is ISO string)
+    sales.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
     return res.json({ sales });
   } catch (err) {
     next(err);
@@ -1058,20 +1079,31 @@ router.get('/sales/:saleId', requireAuth, async (req, res, next) => {
       const productDoc = await db.collection('products').doc(sale.productId).get();
       if (productDoc.exists) productName = productDoc.data().name;
     }
+    // Prefer linked client, fall back to sale.customer* fields written at create time
+    if (!clientName) clientName = sale.customerName || null;
+    if (!clientEmail) clientEmail = sale.customerEmail || '';
+    if (!clientPhone) clientPhone = sale.customerPhone || '';
+    if (!productName) productName = sale.productName || '';
+
     const saleInfo = {
       id: sale.id,
       saleId: sale.saleId,
+      clientId: sale.clientId || null,
       clientName,
       clientEmail,
       clientPhone,
       clientCountry,
+      productId: sale.productId || null,
       productName,
       amount: sale.amount,
+      closerId: sale.closerId || null,
       closerName,
+      productManagerId: sale.productManagerId || null,
       productManagerName,
+      seniorManagerId: sale.seniorManagerId || null,
       seniorManagerName,
       createdAt: sale.createdAt,
-      paymentVerificationStatus: sale.paymentVerificationStatus,
+      paymentVerificationStatus: sale.paymentVerificationStatus || 'pending',
       verifiedAt: sale.verifiedAt,
       verifiedBy: sale.verifiedBy,
       paymentMethod: sale.paymentMethod,
@@ -1079,7 +1111,8 @@ router.get('/sales/:saleId', requireAuth, async (req, res, next) => {
       status: sale.status,
       paymentStatus: sale.paymentStatus,
       deliveryStatus: sale.deliveryStatus,
-      source: sale.source
+      source: sale.source,
+      customerCompany: sale.customerCompany || '',
     };
     return res.json({ sale: saleInfo });
   } catch (err) {

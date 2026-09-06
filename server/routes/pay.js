@@ -378,23 +378,42 @@ router.post('/prepare-sale', requireAuth, async (req, res, next) => {
 
     const now = new Date().toISOString();
 
+    // Create client record when customer details are provided (Admin sales queue needs them)
+    let clientId = null;
+    if (custName || custEmail || custPhone) {
+      clientId = 'cl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await db.collection('clients').doc(clientId).set({
+        id: clientId,
+        name: custName || '',
+        email: custEmail || '',
+        phone: custPhone || '',
+        company: custCompany || '',
+        status: 'active',
+        createdDate: new Date().toISOString().slice(0, 10),
+        source: 'closer-prepare-sale',
+        saleId,
+      }, { merge: true });
+    }
+
     const sale = {
       id: saleId,
       saleId,
-      clientId: null,
+      clientId,
       productId: product.id,
       productName: product.name,
       amount,
       currency: 'INR',
       status: 'pending',
       paymentStatus: 'pending',
+      // Required for Admin GET /admin/sales which filters on this field
+      paymentVerificationStatus: 'pending',
       deliveryStatus: 'locked',
       // Attribution — locked server-side, never from browser
       closerId: closerId,
       closerCode: closerDocRef ? closerDocRef.id : null,
       productManagerId: pmId,
       seniorManagerId: smId,
-      // Customer fields — can be pre-filled if provided
+      // Customer fields — authoritative contact info for Admin queue
       customerName: custName,
       customerEmail: custEmail,
       customerPhone: custPhone,
@@ -405,6 +424,10 @@ router.post('/prepare-sale', requireAuth, async (req, res, next) => {
       paymentInitiatedAt: null,
       paidAt: null,
       gatewaySessionId: null,
+      verifiedAt: null,
+      verifiedBy: null,
+      paymentMethod: null,
+      paymentReference: null,
     };
 
     await db.collection('sales').doc(saleId).set(sale);
