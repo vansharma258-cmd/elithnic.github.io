@@ -986,7 +986,7 @@ try{
 // Every top-level array collection in the app, 1:1 with a Firestore collection.
 // Document ID === the app's own record.id (never Firestore auto-IDs) so writes
 // are idempotent by nature — re-sending the same record can never create a duplicate.
-const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications','products','productSales','tickets','dsaClosers','loanDeals','perfVideos','legalDocuments','productDeals','walletPayouts','withdrawalRequests','saasSales'];
+const FS_COLLECTIONS = ['users','leads','closers','deliveryPartners','freelancers','clients','projects','activities','notifications','products','productSales','tickets','dsaClosers','loanDeals','perfVideos','legalDocuments','productDeals','walletPayouts','withdrawalRequests','saasSales','commissionLedger'];
 const FS_SYSTEM_DOC = FIREBASE_AVAILABLE ? fsdb.collection('system').doc('config') : null; // holds { auth, counters, meta }
 let FS_UNSUBSCRIBERS = [];
 
@@ -1063,7 +1063,7 @@ function defaultDB(){
     users: [],
     leads: [], closers: [], deliveryPartners: [], freelancers: [], clients: [], projects: [],
     activities: [], notifications: [],
-    products: [], productSales: [],
+    products: [], productSales: [], commissionLedger: [],
     tickets: [],
     counters: { lead:0, closer:0, dp:0, freelancer:0, client:0, project:1000, user:0 },
     meta: { createdAt: new Date().toISOString() }
@@ -2516,11 +2516,18 @@ function closerStats(closerId){
   const leads = getAll('leads').filter(l => l.assignedCloserId === closerId);
   const projects = getAll('projects').filter(p => p.closerId === closerId);
   const closedDeals = leads.filter(l => l.status === 'Closed').length;
-  const totalCommission = projects.reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
-  const paidCommission = projects.filter(p=>p.closerCommissionPaid).reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
+  // Project commissions (service delivery) + product-sale commissions from server ledger
+  const projectCommission = projects.reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
+  const projectPaid = projects.filter(p=>p.closerCommissionPaid).reduce((s,p)=>s+(Number(p.closerCommission)||0),0);
+  const ledgerRows = ledgerForCloser(closerId);
+  const productCommission = ledgerRows.reduce((s,l)=>s+(Number(l.closerAmount)||0),0);
+  const productPaid = ledgerRows.filter(l=>(l.payoutStatus||'pending')==='paid').reduce((s,l)=>s+(Number(l.closerAmount)||0),0);
+  const totalCommission = projectCommission + productCommission;
+  const paidCommission = projectPaid + productPaid;
   const pendingCommission = totalCommission - paidCommission;
   return {
     totalLeads: leads.length, closedDeals, totalCommission, paidCommission, pendingCommission,
+    productSaleCommission: productCommission,
     activeProjects: projects.filter(p=>p.status!=='Completed').length,
     contactedLeads: leads.filter(l=>l.status==='Contacted').length,
     lostLeads: leads.filter(l=>l.status==='Lost').length,
@@ -2597,11 +2604,13 @@ function renderManagerDashboard(){
     const pms = productManagers(CURRENT_USER.id);
     const teamClosers = closersUnderSenior(CURRENT_USER.id);
     const products = productsVisibleToCurrentUser();
+    const smComm = myProductSaleCommissionTotal();
     cards = [
       {label:'Product Managers', val: pms.length},
       {label:'Downstream Closers', val: teamClosers.length},
       {label:'Relevant Products', val: products.length},
-      {label:'Open Leads', val: getAll('leads').filter(l=>l.status!=='Converted' && l.status!=='Lost').length}
+      {label:'Open Leads', val: getAll('leads').filter(l=>l.status!=='Converted' && l.status!=='Lost').length},
+      {label:'Product Sale Commission', val: fmtMoney(smComm)}
     ];
     teamHtml = `<div class="panel glass" style="margin-top:18px;"><div class="panel-head"><div class="panel-title">Assigned Product Managers</div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" onclick="openOnboardProductManagerModal()">+ Add Product Manager</button>
@@ -2613,10 +2622,12 @@ function renderManagerDashboard(){
   } else if(role === 'productmanager'){
     const myClosers = closersForManager(CURRENT_USER.id);
     const products = productsVisibleToCurrentUser();
+    const pmComm = myProductSaleCommissionTotal();
     cards = [
       {label:'My Closers', val: myClosers.length},
       {label:'Open Leads', val: getAll('leads').filter(l=>l.status!=='Converted' && l.status!=='Lost').length},
-      {label:'Assigned Products', val: products.length}
+      {label:'Assigned Products', val: products.length},
+      {label:'Product Sale Commission', val: fmtMoney(pmComm)}
     ];
     teamHtml = `<div class="panel glass" style="margin-top:18px;"><div class="panel-head"><div class="panel-title">My Closers</div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" onclick="openOnboardCloserModal()">+ Add Closer</button>
@@ -2643,6 +2654,11 @@ function renderManagerDashboard(){
     </div>
     ${teamHtml}
   `;
+  if (CURRENT_USER && (CURRENT_USER.role === 'productmanager' || CURRENT_USER.role === 'senior_manager')) {
+    const _md = document.getElementById('view-dashboard');
+    if (_md) _md.insertAdjacentHTML('beforeend', renderProductSaleCommissionPanel());
+  }
+
 }
 function renderDsaCloserDashboard(){
   const entityId = CURRENT_USER.entityId;
@@ -4882,6 +4898,9 @@ function renderCloserDashboard(){
       </div>
     </div>
   `;
+  const _cd = document.getElementById('view-dashboard');
+  if (_cd) _cd.insertAdjacentHTML('beforeend', renderProductSaleCommissionPanel());
+
 }
 function renderMyLeadsView(){
   document.getElementById('view-myleads').innerHTML = `
@@ -5158,6 +5177,116 @@ function productTotalCommission(closerId){
 function productPaidCommission(closerId){
   return productSalesForCloser(closerId).filter(x=>x.commissionPaid).reduce((s,x)=>s+(Number(x.closerCommission)||0),0);
 }
+
+/* ---------- Commission Ledger (server-generated after Admin verifies sale) ----------
+   Backend writes to collection `commissionLedger` with fields:
+     closerId (entity), productManagerId (users id), seniorManagerId (users id)
+     closerAmount, productManagerAmount, seniorManagerAmount
+   Dashboards MUST read this collection — not legacy productSales — for product-sale commissions.
+   --------------------------------------------------------------------------- */
+function getCommissionLedgerAll(){
+  return getAll('commissionLedger') || [];
+}
+function ledgerForCloser(entityId){
+  if (!entityId) return [];
+  return getCommissionLedgerAll().filter(l => l.closerId === entityId);
+}
+function ledgerForPM(userId){
+  if (!userId) return [];
+  return getCommissionLedgerAll().filter(l => l.productManagerId === userId);
+}
+function ledgerForSM(userId){
+  if (!userId) return [];
+  return getCommissionLedgerAll().filter(l => l.seniorManagerId === userId);
+}
+function ledgerAmountForCurrentUser(entry){
+  if (!CURRENT_USER || !entry) return 0;
+  if (CURRENT_USER.role === 'closer') return Number(entry.closerAmount) || 0;
+  if (CURRENT_USER.role === 'productmanager') return Number(entry.productManagerAmount) || 0;
+  if (CURRENT_USER.role === 'senior_manager') return Number(entry.seniorManagerAmount) || 0;
+  if (CURRENT_USER.role === 'admin') {
+    return (Number(entry.closerAmount)||0) + (Number(entry.productManagerAmount)||0) + (Number(entry.seniorManagerAmount)||0);
+  }
+  return 0;
+}
+function myProductSaleCommissionTotal(){
+  if (!CURRENT_USER) return 0;
+  if (CURRENT_USER.role === 'closer') {
+    return ledgerForCloser(CURRENT_USER.entityId).reduce((s,l)=>s+(Number(l.closerAmount)||0),0);
+  }
+  if (CURRENT_USER.role === 'productmanager') {
+    return ledgerForPM(CURRENT_USER.id).reduce((s,l)=>s+(Number(l.productManagerAmount)||0),0);
+  }
+  if (CURRENT_USER.role === 'senior_manager') {
+    return ledgerForSM(CURRENT_USER.id).reduce((s,l)=>s+(Number(l.seniorManagerAmount)||0),0);
+  }
+  return 0;
+}
+function myProductSaleCommissionPending(){
+  // payoutStatus on ledger: 'pending' until paid out
+  if (!CURRENT_USER) return 0;
+  let rows = [];
+  if (CURRENT_USER.role === 'closer') rows = ledgerForCloser(CURRENT_USER.entityId);
+  else if (CURRENT_USER.role === 'productmanager') rows = ledgerForPM(CURRENT_USER.id);
+  else if (CURRENT_USER.role === 'senior_manager') rows = ledgerForSM(CURRENT_USER.id);
+  return rows.filter(l => (l.payoutStatus || 'pending') !== 'paid')
+    .reduce((s,l)=>s+ledgerAmountForCurrentUser(l),0);
+}
+function myProductSaleCommissionPaid(){
+  return myProductSaleCommissionTotal() - myProductSaleCommissionPending();
+}
+function ledgerRowsForCurrentUser(){
+  if (!CURRENT_USER) return [];
+  if (CURRENT_USER.role === 'closer') return ledgerForCloser(CURRENT_USER.entityId);
+  if (CURRENT_USER.role === 'productmanager') return ledgerForPM(CURRENT_USER.id);
+  if (CURRENT_USER.role === 'senior_manager') return ledgerForSM(CURRENT_USER.id);
+  if (CURRENT_USER.role === 'admin') return getCommissionLedgerAll();
+  return [];
+}
+function renderProductSaleCommissionPanel(){
+  const rows = ledgerRowsForCurrentUser().slice().sort((a,b)=>{
+    const ta = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt || a.verifiedAt || 0);
+    const tb = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt || b.verifiedAt || 0);
+    return tb - ta;
+  });
+  const total = myProductSaleCommissionTotal();
+  const pending = myProductSaleCommissionPending();
+  const paid = myProductSaleCommissionPaid();
+  if (!rows.length && total === 0) {
+    return `
+      <div class="panel glass" style="margin-top:18px;">
+        <div class="panel-head"><div class="panel-title">Product Sale Commissions</div></div>
+        <p style="font-size:12.5px;color:var(--text-faint);margin:0;">No product-sale commissions yet. When Admin verifies a sale attributed to your hierarchy, amounts appear here (Closer ₹30,000 · PM ₹5,000 · SM ₹5,000).</p>
+      </div>`;
+  }
+  return `
+    <div class="stat-grid" style="margin-top:18px;">
+      <div class="stat-card glass"><div class="ic-badge bg-green">₹</div><div class="stat-val">${fmtMoney(total)}</div><div class="stat-label">Product Sale Commission</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-green">✓</div><div class="stat-val">${fmtMoney(paid)}</div><div class="stat-label">Paid Out</div></div>
+      <div class="stat-card glass"><div class="ic-badge bg-amber">!</div><div class="stat-val">${fmtMoney(pending)}</div><div class="stat-label">Pending Payout</div></div>
+    </div>
+    <div class="panel glass" style="margin-top:14px;">
+      <div class="panel-head"><div class="panel-title">Product Sale Commission Ledger</div></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr>
+        <th>Sale ID</th><th>Your Amount</th><th>Closer</th><th>PM</th><th>SM</th><th>Status</th><th>Payout</th>
+      </tr></thead><tbody>
+        ${rows.map(l=>{
+          const amt = ledgerAmountForCurrentUser(l);
+          const payout = l.payoutStatus || 'pending';
+          return `<tr>
+            <td class="cell-strong" style="font-family:monospace;">${escapeHtml(l.saleId||l.id||'—')}</td>
+            <td style="color:var(--green);font-weight:700;">${fmtMoney(amt)}</td>
+            <td>${fmtMoney(l.closerAmount||0)}</td>
+            <td>${fmtMoney(l.productManagerAmount||0)}</td>
+            <td>${fmtMoney(l.seniorManagerAmount||0)}</td>
+            <td><span class="badge bg-green">${escapeHtml(l.status||'verified')}</span></td>
+            <td>${payout==='paid'?'<span class="status-pill status-active">Paid</span>':'<span class="status-pill status-disabled">Pending</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table></div>
+    </div>`;
+}
+
 function videoEmbedHTML(url, label){
   if(!url) return `<div class="empty-state" style="padding:20px 0;"><div class="ic">▶</div><div class="s">${label} not added yet</div></div>`;
   // Support YouTube, Vimeo, direct video links
@@ -5768,8 +5897,8 @@ function renderMyProductsView(){
   const allActive = getAll('products').filter(p=>p.status==='Active');
   const myProducts = myProductIds.map(id=>getById('products',id)).filter(Boolean);
   const mySales = productSalesForCloser(CURRENT_USER.entityId);
-  const totalEarned = productTotalCommission(CURRENT_USER.entityId);
-  const totalPaid = productPaidCommission(CURRENT_USER.entityId);
+  const totalEarned = myProductSaleCommissionTotal() || productTotalCommission(CURRENT_USER.entityId);
+  const totalPaid = myProductSaleCommissionPaid() || productPaidCommission(CURRENT_USER.entityId);
   document.getElementById('view-myproducts').innerHTML = `
     <div class="stat-grid">
       <div class="stat-card glass"><div class="ic-badge bg-violet">⊞</div><div class="stat-val">${myProducts.length}</div><div class="stat-label">Products Assigned</div></div>
