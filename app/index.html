@@ -1015,6 +1015,19 @@ function fmtMoney(n){
   n = Number(n)||0;
   return '₹' + n.toLocaleString('en-IN', {maximumFractionDigits:0});
 }
+function fmtMoneyUSD(n){
+  n = Number(n)||0;
+  return '$' + n.toLocaleString('en-US', {maximumFractionDigits:2});
+}
+/** Product list price: show INR + USD when both set, else whichever exists */
+function fmtProductPrice(p){
+  if(!p) return '—';
+  const inr = Number(p.price)||0;
+  const usd = Number(p.priceUSD)||0;
+  if(inr && usd) return fmtMoney(inr) + ' / ' + fmtMoneyUSD(usd);
+  if(usd) return fmtMoneyUSD(usd);
+  return fmtMoney(inr);
+}
 function fmtDate(d){
   if(!d) return '—';
   const dt = new Date(d);
@@ -4572,8 +4585,13 @@ async function loadProductsForPaymentLink(){
     }
     sel.innerHTML = '<option value="">Select product</option>' +
       products.map(p => {
-        const price = Number(p.price||0);
-        const label = `${escapeHtml(p.name||'Product')} — ₹${price.toLocaleString('en-IN')}`;
+        const inr = Number(p.price||0);
+        const usd = Number(p.priceUSD||0);
+        let priceLabel = '';
+        if(inr && usd) priceLabel = `₹${inr.toLocaleString('en-IN')} / $${usd.toLocaleString('en-US')}`;
+        else if(usd) priceLabel = `$${usd.toLocaleString('en-US')}`;
+        else priceLabel = `₹${inr.toLocaleString('en-IN')}`;
+        const label = `${escapeHtml(p.name||'Product')} — ${priceLabel}`;
         return `<option value="${escapeHtml(p.id)}">${label}</option>`;
       }).join('');
   } catch (e) {
@@ -5656,7 +5674,7 @@ function renderProductsTable(){
       return `<tr>
         <td class="cell-strong" style="cursor:pointer" onclick="openProductDetail('${p.id}')">${escapeHtml(p.name)}</td>
         <td class="cell-dim">${escapeHtml(p.category||'—')}</td>
-        <td>${fmtMoney(p.price)}</td>
+        <td>${fmtProductPrice(p)}</td>
         <td>${assignedClosers}</td>
         <td>${sales.length}</td>
         <td style="color:var(--green)">${fmtMoney(revenue)}</td>
@@ -5697,8 +5715,9 @@ function openProductModal(productId){
       <div class="field"><label>Status</label><select id="prd_status">
         ${PRODUCT_STATUSES.map(s=>`<option value="${s}" ${s===(p?.status||'Draft')?' selected':''}>${s}</option>`).join('')}
       </select></div>
-      <div class="field"><label>Price (₹) *</label><input type="number" id="prd_price" value="${p?.price||''}"></div>
-      <div class="field"><label>Product Description</label><input type="text" id="prd_description" placeholder="What this product is, in one line" value="${escapeHtml(p?.description||'')}"></div>
+      <div class="field"><label>Price (₹)</label><input type="number" id="prd_price" value="${p?.price||''}" min="0" step="1" placeholder="e.g. 4999"></div>
+      <div class="field"><label>Price (USD $)</label><input type="number" id="prd_priceUSD" value="${p?.priceUSD||''}" min="0" step="0.01" placeholder="e.g. 59.99"></div>
+      <div class="field" style="grid-column:1/-1"><label>Product Description</label><input type="text" id="prd_description" placeholder="What this product is, in one line" value="${escapeHtml(p?.description||'')}"></div>
       <div class="field" style="grid-column:1/-1"><label>Purpose / Demo Video URL <span style="font-size:11px;color:var(--text-faint)">(YouTube / Vimeo / direct) — sent to Closer</span></label><input type="url" id="prd_purposeVideo" value="${escapeHtml(p?.purposeVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
       <div class="field" style="grid-column:1/-1"><label>Setup / How-to-Run Video URL <span style="font-size:11px;color:var(--text-faint)">(released to client on payment)</span></label><input type="url" id="prd_setupVideo" value="${escapeHtml(p?.setupVideoUrl||'')}" placeholder="https://youtu.be/..."></div>
       <div class="field" style="grid-column:1/-1"><label>Delivery File URL <span style="font-size:11px;color:var(--text-faint)">(ZIP, PDF, ebook, template — any direct download link — released on payment)</span></label><input type="url" id="prd_zipUrl" value="${escapeHtml(p?.zipUrl||'')}" placeholder="https://drive.google.com/..."></div>
@@ -5846,7 +5865,9 @@ async function submitProductForm(productId){
   }
   const name = document.getElementById('prd_name').value.trim();
   const price = parseFloat(document.getElementById('prd_price').value)||0;
-  if(!name || price <= 0){ toast('Product name and price are required', 'error'); return; }
+  const priceUSD = parseFloat(document.getElementById('prd_priceUSD').value)||0;
+  if(!name){ toast('Product name is required', 'error'); return; }
+  if(price <= 0 && priceUSD <= 0){ toast('Enter at least one price (₹ or USD)', 'error'); return; }
   const isNew = !productId;
   const existing = productId ? getById('products', productId) : null;
   if(isNew && !(CURRENT_USER && CURRENT_USER.role === 'admin')){
@@ -5867,6 +5888,7 @@ async function submitProductForm(productId){
     category: document.getElementById('prd_category').value,
     status: document.getElementById('prd_status').value,
     price,
+    priceUSD,
     description: document.getElementById('prd_description').value.trim(),
     purposeVideoUrl: document.getElementById('prd_purposeVideo').value.trim(),
     setupVideoUrl: document.getElementById('prd_setupVideo').value.trim(),
@@ -5937,7 +5959,7 @@ async function openProductDetail(productId){
   renderModal(`
     <div class="modal-head"><div class="modal-title">${escapeHtml(p.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="detail-row"><span>Category</span><span>${escapeHtml(p.category||'—')}</span></div>
-    <div class="detail-row"><span>Price</span><span>${fmtMoney(p.price)}</span></div>
+    <div class="detail-row"><span>Price</span><span>${fmtProductPrice(p)}</span></div>
     <div class="detail-row"><span>Status</span><span><span class="badge ${p.status==='Active'?'badge-closed':p.status==='Draft'?'badge-new':'badge-lost'}">${p.status}</span></span></div>
     <div class="detail-row"><span>Tech Stack</span><span>${escapeHtml(p.tags||'—')}</span></div>
     <div class="detail-row"><span>Total Sales</span><span>${sales.length}</span></div>
@@ -6368,9 +6390,9 @@ function renderMyProductsView(){
       <div class="panel glass">
         <div class="panel-head">
           <div><div class="panel-title">${escapeHtml(p.name)}</div><div style="font-size:12px;color:var(--text-faint);margin-top:2px;">${escapeHtml(p.category||'')} ${p.tags?'· '+escapeHtml(p.tags):''}</div></div>
-          <div class="panel-actions"><span class="stat-val" style="font-size:18px;">${fmtMoney(p.price)}</span></div>
+          <div class="panel-actions"><span class="stat-val" style="font-size:18px;">${fmtProductPrice(p)}</span></div>
         </div>
-        <div class="detail-row"><span>Your Commission per Sale</span><span style="color:var(--green);font-weight:700;">${fmtMoney(Math.round(p.price*0.20))} (20%)</span></div>
+        <div class="detail-row"><span>Your Commission per Sale</span><span style="color:var(--green);font-weight:700;">${fmtMoney(Math.round((Number(p.price)||0)*0.20))} (20%)</span></div>
         <div class="detail-row"><span>Description</span><span>${escapeHtml(p.description||'—')}</span></div>
         <div class="detail-section-title">Purpose / Demo Video</div>
         ${videoEmbedHTML(p.purposeVideoUrl, 'Purpose Demo Video')}
